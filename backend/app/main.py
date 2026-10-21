@@ -117,9 +117,28 @@ async def finance_error_handler(request: Request, exc: FinanceError):
 
 
 @app.get("/api/health", tags=["system"])
-def health_check():
-    """Liveness/readiness probe for Docker, Nginx and monitoring."""
-    return {"status": "ok", "app": settings.APP_NAME, "environment": settings.ENVIRONMENT}
+def health_check(db: bool = False):
+    """Liveness/readiness probe for Docker, Nginx and monitoring.
+
+    `?db=true` also tries the database and says which kind of failure it hit,
+    by exception class and PostgreSQL error code only, never the address or
+    credentials, so a hosted deployment can be diagnosed without its logs."""
+    out = {"status": "ok", "app": settings.APP_NAME, "environment": settings.ENVIRONMENT}
+    if db:
+        from sqlalchemy import text
+        from app.core.database import engine
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("select 1"))
+                out["database"] = "ok"
+                out["schema_version"] = conn.execute(text("select version_num from alembic_version")).scalar()
+                out["users"] = conn.execute(text("select count(*) from users")).scalar()
+        except Exception as exc:  # report the kind of failure, not its text
+            original = getattr(exc, "orig", None)
+            out["database"] = "failed"
+            out["error"] = type(original or exc).__name__
+            out["sqlstate"] = getattr(original, "sqlstate", None)
+    return out
 
 
 # --- Uploaded files ---
