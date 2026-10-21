@@ -116,6 +116,108 @@ def seed_permissions(db: Session) -> list[Permission]:
     db.commit()
     print(f"  permissions: {created} added, {len(existing)} already present")
     return db.scalars(select(Permission)).all()
+def seed_roles_and_lead_sources(
+    db: Session,
+    company: Company,
+    permissions: list[Permission],
+) -> None:
+    """Initialize default roles and lead sources without duplicates."""
+
+    dashboard_code = "dashboard.business.view"
+
+    role_definitions = [
+        (
+            "Staff",
+            "Every module except business dashboard figures and Security screens.",
+        ),
+        (
+            "Business Dashboard",
+            "Can view business figures on the home dashboard.",
+        ),
+    ]
+
+    for name, description in role_definitions:
+        role = db.scalar(
+            select(Role).where(
+                Role.company_id == company.id,
+                Role.name == name,
+            )
+        )
+
+        if role is None:
+            role = Role(
+                id=uuid.uuid4(),
+                company_id=company.id,
+                name=name,
+                description=description,
+                is_system_role=True,
+            )
+            db.add(role)
+            db.flush()
+
+        if name == "Staff":
+            allowed = [
+                permission
+                for permission in permissions
+                if permission.code != dashboard_code
+                and not permission.code.startswith("security.")
+            ]
+        else:
+            allowed = [
+                permission
+                for permission in permissions
+                if permission.code == dashboard_code
+            ]
+
+        # Preserve existing assignments and add any missing defaults.
+        existing_ids = {permission.id for permission in role.permissions}
+
+        for permission in allowed:
+            if permission.id not in existing_ids:
+                role.permissions.append(permission)
+
+        print(f"  role: {name} initialized")
+
+    from app.leads.models import LeadSource
+
+    default_sources = [
+        "Website",
+        "Referral",
+        "Existing Customer",
+        "Exhibition",
+        "Cold Call",
+        "WhatsApp / Phone",
+        "Social Media",
+        "Walk-in",
+    ]
+
+    existing_sources = set(
+        db.scalars(
+            select(LeadSource.name).where(
+                LeadSource.company_id == company.id
+            )
+        ).all()
+    )
+
+    added = 0
+
+    for order, name in enumerate(default_sources, start=1):
+        if name in existing_sources:
+            continue
+
+        db.add(
+            LeadSource(
+                id=uuid.uuid4(),
+                company_id=company.id,
+                name=name,
+                is_active=True,
+                sort_order=order * 10,
+            )
+        )
+        added += 1
+
+    db.commit()
+    print(f"  lead sources: {added} added")
 
 
 def seed(db: Session) -> None:
@@ -190,6 +292,7 @@ def seed(db: Session) -> None:
     role.permissions = permissions
     db.commit()
     print(f"  role: Administrator holds {len(permissions)} permissions")
+    seed_roles_and_lead_sources(db, company, permissions)
 
     # Finance structure only: numbering, the standard chart if there is none,
     # posting rules and periods. No balance or journal is ever seeded.
