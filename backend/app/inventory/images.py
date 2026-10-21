@@ -1,7 +1,8 @@
 """
 Product image storage.
 
-Images live on disk under `settings.UPLOAD_DIR`, never in the database: a
+Images live in Cloudflare R2 when it is configured (the hosted server keeps no
+files), else on disk under `settings.UPLOAD_DIR`; never in the database: a
 photo stored in a row makes every SELECT on inventory_items carry it, and the
 Postgres backup grows with the pictures. The row keeps a short relative key
 ("items/<uuid>.jpg") and the file keeps the bytes.
@@ -65,8 +66,34 @@ def delete_item_image(item_id: uuid.UUID) -> None:
     delete_image(ITEM_IMAGE_DIR, item_id)
 
 
+CONTENT_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def r2_enabled() -> bool:
+    """Pictures go to Cloudflare R2 when its settings are present (the hosted
+    server keeps no files of its own); otherwise to UPLOAD_DIR on this disk."""
+    return all((settings.R2_ACCOUNT_ID, settings.R2_ACCESS_KEY_ID,
+                settings.R2_SECRET_ACCESS_KEY, settings.R2_BUCKET_NAME))
+
+
+def read_image(storage_key: str) -> bytes | None:
+    """The stored bytes for a key, or None when there is no such image."""
+    if r2_enabled():
+        try:
+            return get_r2_client().get_object(Bucket=settings.R2_BUCKET_NAME, Key=storage_key)["Body"].read()
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404", "NotFound"):
+                return None
+            raise
+    path = Path(settings.UPLOAD_DIR) / storage_key
+    return path.read_bytes() if path.is_file() else None
+
+
 def save_image(file: UploadFile, subdir: str, owner_id: uuid.UUID) -> str:
-def save_image(file: UploadFile, subdir: str, owner_id: uuid.UUID) -> str:
+    """Validate and store one image named after the record that owns it,
+    returning its storage key. An image held under another extension is
+    removed only after the new one is stored, so a failed upload never leaves
+    the record without its old picture."""
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
     data = file.file.read(max_bytes + 1)
 
@@ -82,44 +109,35 @@ def save_image(file: UploadFile, subdir: str, owner_id: uuid.UUID) -> str:
         raise HTTPException(400, "Unsupported image format.")
 
     key = f"{subdir}/{owner_id}{extension}"
-    client = get_r2_client()
-
-    content_types = {
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }
-
-    try:
-        client.put_object(
-            Bucket=settings.R2_BUCKET_NAME,
-            Key=key,
-            Body=data,
-            ContentType=content_types[extension],
-        )
-    except ClientError:
-        raise HTTPException(502, "Image storage is unavailable.")
-
-    # Only remove other extensions after the new image is stored.
-    for old_extension in _EXTENSIONS:
-        old_key = f"{subdir}/{owner_id}{old_extension}"
-        if old_key != key:
-            client.delete_object(
-                Bucket=settings.R2_BUCKET_NAME,
-                Key=old_key,
-            )
-
+    if r2_enabled():
+        client = get_r2_client()
+        try:
+            client.put_object(Bucket=settings.R2_BUCKET_NAME, Key=key, Body=data,
+                              ContentType=CONTENT_TYPES[extension])
+            for old_extension in _EXTENSIONS - {extension}:
+                client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=f"{subdir}/{owner_id}{old_extension}")
+        except ClientError:
+            raise HTTPException(502, "The picture store is not answering. Try again in a minute.")
+    else:
+        directory = Path(settings.UPLOAD_DIR) / subdir
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{owner_id}{extension}").write_bytes(data)
+        for old_extension in _EXTENSIONS - {extension}:
+            (directory / f"{owner_id}{old_extension}").unlink(missing_ok=True)
     return key
 
 
 def delete_image(subdir: str, owner_id: uuid.UUID) -> None:
-    client = get_r2_client()
-
+    """Remove the owner's image, whichever extension it was stored with.
+    Silent when there is nothing to remove."""
+    if r2_enabled():
+        client = get_r2_client()
+        for extension in _EXTENSIONS:
+            client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=f"{subdir}/{owner_id}{extension}")
+        return
+    directory = Path(settings.UPLOAD_DIR) / subdir
     for extension in _EXTENSIONS:
-        client.delete_object(
-            Bucket=settings.R2_BUCKET_NAME,
-            Key=f"{subdir}/{owner_id}{extension}",
-        )
+        (directory / f"{owner_id}{extension}").unlink(missing_ok=True)
 
 
 def image_url(request: Request, storage_key: str | None) -> str | None:

@@ -2,10 +2,9 @@ import logging
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.auth.router import router as auth_router
 from app.calibration.router import router as calibration_router
@@ -151,20 +150,31 @@ def health_check(db: bool = False):
 # the intended trade; if product photos ever need to be access-controlled,
 # replace this mount with an authenticated route and have the frontend load
 # images through fetch() into object URLs.
-import os
+#
+# The pictures are read through this route rather than a static folder,
+# because the hosted server keeps no files: they are in Cloudflare R2 there
+# (app/inventory/images.py), and on this disk when R2 is not configured.
+import re
 
-if os.environ.get("VERCEL"):
-    upload_directory = Path("/tmp/jezseem-uploads")
-else:
-    upload_directory = Path(settings.UPLOAD_DIR)
 
-upload_directory.mkdir(parents=True, exist_ok=True)
+from app.inventory import images as _images
 
-app.mount(
-    MEDIA_URL_PREFIX,
-    StaticFiles(directory=str(upload_directory)),
-    name="media",
-)
+# Product pictures carry the item code (from the legacy import) or the item id;
+# employee photos the employee id. Nothing else, and no path separators.
+_MEDIA_KEY = re.compile(r"^(items|employees)/[A-Za-z0-9_-]{1,64}\.(jpg|png|webp)$")
+
+
+@app.get(MEDIA_URL_PREFIX + "/{storage_key:path}", include_in_schema=False)
+def media(storage_key: str):
+    if not _MEDIA_KEY.match(storage_key):
+        raise HTTPException(404, "Not found")
+    data = _images.read_image(storage_key)
+    if data is None:
+        raise HTTPException(404, "Not found")
+    # Replacing a picture keeps its name, so the browser may cache it for an
+    # hour but not for days.
+    return Response(data, media_type=_images.CONTENT_TYPES["." + storage_key.rsplit(".", 1)[1]],
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 
