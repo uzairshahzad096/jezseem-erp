@@ -94,7 +94,7 @@ export default function OpportunitiesPage() {
         {byCustomer.map((g) => (
           <section key={g.id || g.name} className="rounded-[14px] border border-line bg-surface shadow-panel">
             <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3">
-              {g.id ? <Link href={`/crm/customers/${g.id}`} className="text-[14px] font-semibold hover:text-primary">{g.name}</Link>
+              {g.id ? <Link href={`/crm/customers/detail?id=${g.id}`} className="text-[14px] font-semibold hover:text-primary">{g.name}</Link>
                 : <b className="text-[14px]">{g.name}</b>}
               <span className="text-[12px] text-muted">{g.leads.length} opportunit{g.leads.length === 1 ? "y" : "ies"}</span>
               <span className="ml-auto text-[13px] font-semibold">PKR {money(g.value)}</span>

@@ -122,7 +122,7 @@ function CustomerList() {
             </tr></thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.id} onClick={() => router.push(`/crm/customers/${r.id}`)} className={`${gridRowClass(i)} cursor-pointer`}>
+                <tr key={r.id} onClick={() => router.push(`/crm/customers/detail?id=${r.id}`)} className={`${gridRowClass(i)} cursor-pointer`}>
                   <td className={gridCellClass(false, "font-medium")}>{r.name}<span className="block text-[11px] font-normal text-faint">{r.code}{r.phone ? ` · ${r.phone}` : ""}</span></td>
                   <td className={gridCellClass(false, "max-w-[180px] truncate text-muted")} title={r.address ?? ""}>{r.city ?? r.address ?? "—"}</td>
                   <td className={gridCellClass()}><span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold ${SEGMENT_TONE[r.segment]}`}>{r.segment}</span></td>
@@ -153,7 +153,7 @@ function CustomerList() {
       </section>
 
       <PartnerModal open={adding} partner={null} onClose={() => setAdding(false)}
-        onSaved={(p) => { setAdding(false); router.push(`/crm/customers/${p.id}`); }} />
+        onSaved={(p) => { setAdding(false); router.push(`/crm/customers/detail?id=${p.id}`); }} />
     </>
   );
 }

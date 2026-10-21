@@ -15,7 +15,7 @@ const COLUMNS: ListColumn<Contact>[] = [
     <span className="font-medium">{r.contact_name}{r.is_primary && <Star size={11} className="ml-1 inline text-amber" />}
       {!r.is_active && <span className="ml-1.5 text-[11px] text-faint">inactive</span>}</span>) },
   { key: "customer_name", label: "Customer", render: (r) => (
-    <Link href={`/crm/customers/${r.partner_id}`} onClick={(e) => e.stopPropagation()} className="hover:text-primary hover:underline">{r.customer_name}</Link>) },
+    <Link href={`/crm/customers/detail?id=${r.partner_id}`} onClick={(e) => e.stopPropagation()} className="hover:text-primary hover:underline">{r.customer_name}</Link>) },
   { key: "title", label: "Designation" },
   { key: "department", label: "Department" },
   { key: "cell", label: "Mobile", render: (r) => (r.cell ? <a href={`tel:${r.cell}`} className="hover:text-primary">{r.cell}</a> : "") },

@@ -123,7 +123,7 @@ export function LeadDrawer({ leadId, lookups, onClose, onChanged, onEdit }: {
               </div>
               <h2 className="m-0 mt-2 text-[19px] font-semibold leading-tight">
                 {lead.customer_id
-                  ? <Link href={`/crm/customers/${lead.customer_id}`} className="hover:text-primary hover:underline" title="Open the customer">{lead.company_name}</Link>
+                  ? <Link href={`/crm/customers/detail?id=${lead.customer_id}`} className="hover:text-primary hover:underline" title="Open the customer">{lead.company_name}</Link>
                   : lead.company_name}
               </h2>
               <p className="m-0 mt-1 text-[13px] text-muted">{lead.title}</p>

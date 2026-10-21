@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft, BookOpen, CalendarClock, Check, ClipboardList, Cog, FileText, Mail, MapPin, MessageCircle, Pencil,
   Phone, Plus, Printer, Receipt, ShoppingCart, Sparkles, Star, UserPlus, Wallet, Wrench,
@@ -23,9 +23,13 @@ import { openPdf } from "@/lib/openPdf";
 
 type Tab = "overview" | "sales" | "service" | "people" | "activity";
 
-export default function Customer360Page() {
-  const { id } = useParams<{ id: string }>();
-  const view = useFetch<Customer360>(`/crm/customers/${id}`);
+function Customer360Content() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
+
+  const view = useFetch<Customer360>(
+    id ? `/crm/customers/${id}` : ""
+  );
   const lookups = useLeadLookups();
   const customers = useCustomers();
   const [tab, setTab] = useState<Tab>("overview");
@@ -349,5 +353,13 @@ export default function Customer360Page() {
       {openLead && <LeadDrawer leadId={openLead} lookups={lookups} onClose={() => setOpenLead(null)} onChanged={view.reload}
         onEdit={() => setOpenLead(null)} />}
     </AppShell>
+  );
+}
+
+export default function Customer360Page() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading customer...</div>}>
+      <Customer360Content />
+    </Suspense>
   );
 }

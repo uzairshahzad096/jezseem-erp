@@ -195,7 +195,7 @@ export default function DashboardPage() {
               </Panel>
               <Panel title="Best customers this year" link={["/crm/customers", "All customers"]}>
                 <Bars rows={data.top_customers.map((c) => ({ key: c.id, label: c.name, value: c.value, sub: `${c.orders} orders`,
-                  href: `/crm/customers/${c.id}` }))} color="bg-primary" />
+                  href: `/crm/customers/detail?id=${c.id}` }))} color="bg-primary" />
               </Panel>
             </section>
 
@@ -223,7 +223,7 @@ export default function DashboardPage() {
                 )}
               </Panel>
               <Panel title="Who owes us most" link={["/finance/aging", "AR aging"]}>
-                <Bars rows={data.owing.map((c) => ({ key: c.id, label: c.name, value: c.balance, href: `/crm/customers/${c.id}` }))} color="bg-violet" />
+                <Bars rows={data.owing.map((c) => ({ key: c.id, label: c.name, value: c.balance, href: `/crm/customers/detail?id=${c.id}` }))} color="bg-violet" />
               </Panel>
             </section>
 
@@ -245,11 +245,11 @@ export default function DashboardPage() {
               </Panel>
               <Panel title="Latest sales orders" link={["/inventory/transactions/sales-orders", "All orders"]}>
                 <List rows={data.recent_orders.map((o) => ({ key: o.id, title: o.customer, sub: `${o.doc_number} · ${day(o.doc_date)} · ${o.status}`,
-                  value: o.value, href: `/crm/customers/${o.customer_id}` }))} icon={<PackageSearch size={13} />} tone="bg-primary/10 text-primary" />
+                  value: o.value, href: `/crm/customers/detail?id=${o.customer_id}` }))} icon={<PackageSearch size={13} />} tone="bg-primary/10 text-primary" />
               </Panel>
               <Panel title="Latest payments received" link={["/finance/receipts", "All receipts"]}>
                 <List rows={data.recent_receipts.map((r) => ({ key: r.id, title: r.customer, sub: `${r.receipt_number} · ${day(r.receipt_date)}`,
-                  value: r.amount, href: `/crm/customers/${r.customer_id}` }))} icon={<CircleDollarSign size={13} />} tone="bg-violet/10 text-violet" />
+                  value: r.amount, href: `/crm/customers/detail?id=${r.customer_id}` }))} icon={<CircleDollarSign size={13} />} tone="bg-violet/10 text-violet" />
               </Panel>
             </section>
           </>

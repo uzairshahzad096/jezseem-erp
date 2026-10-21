@@ -114,7 +114,7 @@ export default function ActivitiesPage() {
                       <div><b>{a.activity_type}</b> · {a.summary}</div>
                       {a.outcome && <div className="mt-0.5 text-[12.3px]">→ {a.outcome}</div>}
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-muted">
-                        {a.customer_id ? <Link href={`/crm/customers/${a.customer_id}`} className="font-medium text-text hover:text-primary">{a.customer_name}</Link>
+                        {a.customer_id ? <Link href={`/crm/customers/detail?id=${a.customer_id}`} className="font-medium text-text hover:text-primary">{a.customer_name}</Link>
                           : a.lead_title ? <span className="font-medium text-text">{a.lead_title}</span> : null}
                         {a.lead_id && <button onClick={() => setOpened(a.lead_id)} className="rounded bg-violet/10 px-1.5 font-semibold text-violet">{a.lead_number}</button>}
                         {a.contact && <span>with {a.contact}</span>}
