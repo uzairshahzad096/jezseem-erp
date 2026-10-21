@@ -25,6 +25,18 @@ from app.auth.dependencies import get_current_user
 from app.companies.models import Branch, Company, FinancialYear
 from app.core.config import settings
 from app.core.database import engine, get_db
+
+from sqlalchemy.engine import make_url
+
+# Safety: automated tests must use the isolated test database.
+_test_database = make_url(settings.DATABASE_URL).database
+
+if _test_database != "jezseem_erp_test":
+    raise RuntimeError(
+        "Tests blocked: DATABASE_URL must point to "
+        "jezseem_erp_test, not the main ERP database."
+    )
+    
 from app.finance.context import FinanceContext
 from app.finance.setup import install_defaults
 from app.partners.models import BusinessPartner
