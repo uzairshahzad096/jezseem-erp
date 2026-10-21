@@ -36,7 +36,7 @@ if _test_database != "jezseem_erp_test":
         "Tests blocked: DATABASE_URL must point to "
         "jezseem_erp_test, not the main ERP database."
     )
-    
+
 from app.finance.context import FinanceContext
 from app.finance.setup import install_defaults
 from app.partners.models import BusinessPartner
