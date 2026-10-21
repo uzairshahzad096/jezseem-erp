@@ -143,12 +143,18 @@ def health_check(db: bool = False):
             out["pictures"] = "local folder (R2 not configured)"
         else:
             from app.core.r2_storage import get_r2_client
+            # Listing one object names the reason when refused (InvalidAccessKeyId,
+            # SignatureDoesNotMatch, AccessDenied), where a HEAD only says 403.
             try:
-                get_r2_client().head_bucket(Bucket=settings.R2_BUCKET_NAME)
-                out["pictures"] = "r2 ok"
+                found = get_r2_client().list_objects_v2(Bucket=settings.R2_BUCKET_NAME, MaxKeys=1)
+                out["pictures"] = "r2 ok" + ("" if found.get("KeyCount") else " (bucket is empty)")
             except Exception as exc:
                 code = getattr(exc, "response", {}).get("Error", {}).get("Code") if hasattr(exc, "response") else None
                 out["pictures"] = f"r2 failed: {type(exc).__name__} {code or ''}".strip()
+            out["r2_bucket"] = settings.R2_BUCKET_NAME
+            out["r2_key_length"] = {"account_id": len(settings.R2_ACCOUNT_ID),
+                                    "access_key_id": len(settings.R2_ACCESS_KEY_ID),
+                                    "secret": len(settings.R2_SECRET_ACCESS_KEY)}
     return out
 
 
