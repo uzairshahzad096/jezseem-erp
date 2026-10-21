@@ -17,6 +17,9 @@ The size ceiling is MAX_UPLOAD_SIZE_MB from .env, not a value invented here.
 import uuid
 from pathlib import Path
 
+from botocore.exceptions import ClientError
+from app.core.r2_storage import get_r2_client
+
 from fastapi import HTTPException, Request, UploadFile
 
 from app.core.config import settings
@@ -63,47 +66,60 @@ def delete_item_image(item_id: uuid.UUID) -> None:
 
 
 def save_image(file: UploadFile, subdir: str, owner_id: uuid.UUID) -> str:
-    """Validate and store one image under UPLOAD_DIR/<subdir>, named after
-    the record that owns it, returning its storage key.
-
-    Any image already held for the owner is removed first, including one saved
-    under a different extension, so a record never ends up with two files and
-    a stale one cannot be served after a replacement.
-    """
+def save_image(file: UploadFile, subdir: str, owner_id: uuid.UUID) -> str:
     max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    # One byte over the limit is enough to know it is too big, so an oversized
-    # upload is never read into memory in full.
     data = file.file.read(max_bytes + 1)
 
     if not data:
         raise HTTPException(400, "The uploaded file is empty.")
+
     if len(data) > max_bytes:
-        raise HTTPException(
-            413, f"That image is larger than {settings.MAX_UPLOAD_SIZE_MB} MB."
-        )
+        raise HTTPException(413, "Image exceeds upload size limit.")
 
     extension = _detect_extension(data[:16])
+
     if extension is None:
-        raise HTTPException(
-            400,
-            "That file is not a JPEG, PNG or WebP image. Save the picture in "
-            "one of those formats and try again.",
+        raise HTTPException(400, "Unsupported image format.")
+
+    key = f"{subdir}/{owner_id}{extension}"
+    client = get_r2_client()
+
+    content_types = {
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=key,
+            Body=data,
+            ContentType=content_types[extension],
         )
+    except ClientError:
+        raise HTTPException(502, "Image storage is unavailable.")
 
-    directory = Path(settings.UPLOAD_DIR) / subdir
-    directory.mkdir(parents=True, exist_ok=True)
-    delete_image(subdir, owner_id)
-    (directory / f"{owner_id}{extension}").write_bytes(data)
+    # Only remove other extensions after the new image is stored.
+    for old_extension in _EXTENSIONS:
+        old_key = f"{subdir}/{owner_id}{old_extension}"
+        if old_key != key:
+            client.delete_object(
+                Bucket=settings.R2_BUCKET_NAME,
+                Key=old_key,
+            )
 
-    return f"{subdir}/{owner_id}{extension}"
+    return key
 
 
 def delete_image(subdir: str, owner_id: uuid.UUID) -> None:
-    """Remove the owner's image file, whichever extension it was stored with.
-    Silent when there is nothing to remove."""
-    directory = Path(settings.UPLOAD_DIR) / subdir
+    client = get_r2_client()
+
     for extension in _EXTENSIONS:
-        (directory / f"{owner_id}{extension}").unlink(missing_ok=True)
+        client.delete_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=f"{subdir}/{owner_id}{extension}",
+        )
 
 
 def image_url(request: Request, storage_key: str | None) -> str | None:
