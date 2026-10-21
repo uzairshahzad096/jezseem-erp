@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.audit.service import AuditContext, record
 from app.auth.dependencies import get_current_user
-from app.auth.schemas import CurrentUserResponse, LoginRequest, TokenResponse
-from app.auth.security import create_access_token, create_refresh_token, verify_password
+from app.auth.schemas import CurrentUserResponse, LoginRequest, RefreshRequest, TokenResponse
+from app.auth.security import create_access_token, create_refresh_token, decode_token, verify_password
 from app.core.database import get_db
 from app.users.models import User
 
@@ -44,6 +44,23 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
 
     _audit_login(db, request, user, payload.username, "login")
+    return TokenResponse(
+        access_token=create_access_token(str(user.id)),
+        refresh_token=create_refresh_token(str(user.id)),
+    )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+    """Swap a refresh token for a fresh pair, so a signed-in computer stays
+    signed in while it is used. A switched-off account is refused here, so
+    deactivating a user ends their session within one access-token lifetime."""
+    claims = decode_token(payload.refresh_token)
+    if not claims or claims.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please sign in again.")
+    user = db.get(User, claims.get("sub"))
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Please sign in again.")
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
         refresh_token=create_refresh_token(str(user.id)),

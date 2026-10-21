@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, authFetch } from "@/lib/api";
 import { usePageSize } from "@/lib/usePageSize";
 
 export interface SalesDocSummary {
@@ -153,10 +153,7 @@ export async function openDocumentPdf(docId: string, kind: string) {
   const url = `${base}/documents/sales/${docId}/${kind}.pdf`;
   const win = window.open("", "_blank");
   try {
-    const token = sessionStorage.getItem("jezseem-access-token");
-    const res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await authFetch(url);
     if (!res.ok) {
       let detail = `Could not generate the document (${res.status}).`;
       try { detail = (await res.json()).detail ?? detail; } catch { /* no body */ }

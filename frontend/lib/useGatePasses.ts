@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, authFetch } from "@/lib/api";
 import { usePageSize } from "@/lib/usePageSize";
 
 export interface GatePassSummary {
@@ -157,10 +157,7 @@ export async function openGatePassPdf(passId: string) {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
   const win = window.open("", "_blank");
   try {
-    const token = sessionStorage.getItem("jezseem-access-token");
-    const res = await fetch(`${base}/documents/gate-passes/${passId}.pdf`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await authFetch(`${base}/documents/gate-passes/${passId}.pdf`);
     if (!res.ok) {
       let detail = `Could not generate the gate pass (${res.status}).`;
       try { detail = (await res.json()).detail ?? detail; } catch { /* no body */ }

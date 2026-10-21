@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, getToken } from "@/lib/api";
+import { api, authFetch } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -175,10 +175,7 @@ export function sourceLink(documentType: string | null, documentId: string | nul
 
 /** Fetch a file from the API with the session token and save it. */
 export async function download(path: string, fallbackName: string): Promise<void> {
-  const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await authFetch(`${BASE}${path}`);
   if (!res.ok) {
     let detail = `Could not build the file (${res.status}).`;
     try { detail = (await res.json()).detail ?? detail; } catch { /* no body */ }
@@ -197,13 +194,9 @@ export async function download(path: string, fallbackName: string): Promise<void
 
 /** Multipart upload with extra form fields. */
 export async function uploadForm<T>(path: string, form: FormData): Promise<T> {
-  const token = getToken();
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, {
-      method: "POST", body: form,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    res = await authFetch(`${BASE}${path}`, { method: "POST", body: form });
   } catch {
     throw new Error(`Cannot reach the ERP server at ${BASE}.`);
   }

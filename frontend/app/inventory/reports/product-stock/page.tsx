@@ -7,7 +7,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { ColumnPicker, DownloadMenu, useHiddenColumns } from "@/components/ui/TableTools";
 import { GridHeader, GridTh, gridRowClass, gridCellClass } from "@/components/ui/grid";
-import { api } from "@/lib/api";
+import { api, authFetch } from "@/lib/api";
 import { useLookups } from "@/lib/useLookups";
 import { Modal, Field, TextInput, TextArea, Select } from "@/components/ui/Modal";
 
@@ -257,9 +257,7 @@ export default function ProductStockReport() {
     setDownloading(true);
     try {
       const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
-      const token = sessionStorage.getItem("jezseem-access-token");
-      const res = await fetch(`${base}/reports/product-stock/workbook?${analysisQuery()}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await authFetch(`${base}/reports/product-stock/workbook?${analysisQuery()}`);
       if (!res.ok) {
         let detail = `Could not build the workbook (${res.status}).`;
         try { detail = (await res.json()).detail ?? detail; } catch { /* no body */ }

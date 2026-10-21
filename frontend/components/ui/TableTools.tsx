@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Download, Columns3, Check, Loader2 } from "lucide-react";
+import { authFetch } from "@/lib/api";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -48,12 +49,8 @@ export function DownloadMenu({
   const download = async (format: string) => {
     setBusy(format);
     try {
-      const token = sessionStorage.getItem("jezseem-access-token");
       const separator = query ? "&" : "";
-      const res = await fetch(
-        `${BASE}/exports/${dataset}?format=${format}${separator}${query}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-      );
+      const res = await authFetch(`${BASE}/exports/${dataset}?format=${format}${separator}${query}`);
       if (!res.ok) {
         let detail = `Could not build the file (${res.status}).`;
         try { detail = (await res.json()).detail ?? detail; } catch { /* no body */ }

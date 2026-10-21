@@ -1,38 +1,78 @@
 /**
  * Thin API client for the FastAPI backend.
  *
- * The access token is kept in memory + sessionStorage for now. Moving it to
- * an httpOnly cookie is tracked for the security hardening pass (spec §15)
- * and will change only this file.
+ * The tokens are kept in localStorage, so a computer stays signed in across
+ * tabs and restarts: the short access token is renewed from the refresh token
+ * (30 days, renewed on use) whenever the server answers 401 (owner,
+ * 21-Oct-2026). Moving them to an httpOnly cookie is tracked for the security
+ * hardening pass (spec §15) and will change only this file.
  */
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-console.log("[Jezseem API] BASE =", BASE);
-
 const TOKEN_KEY = "jezseem-access-token";
+const REFRESH_KEY = "jezseem-refresh-token";
 
 export function getToken(): string | null {
   try {
-    return sessionStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
   }
 }
 
-export function setToken(token: string): void {
+/** Store a fresh sign-in. The refresh token is optional so older callers still work. */
+export function setToken(token: string, refresh?: string): void {
   try {
-    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(TOKEN_KEY, token);
+    if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
   } catch {
-    /* storage unavailable — session will not survive a reload */
+    /* storage unavailable — the sign-in will not survive a reload */
   }
 }
 
 export function clearToken(): void {
   try {
-    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);  // left by the earlier per-tab sign-in
   } catch {
     /* nothing to clear */
+  }
+}
+
+/** One renewal at a time, shared by every request that hit the 401 together. */
+let renewing: Promise<boolean> | null = null;
+
+function renew(): Promise<boolean> {
+  if (!renewing) {
+    renewing = (async () => {
+      let refresh: string | null = null;
+      try { refresh = localStorage.getItem(REFRESH_KEY); } catch { /* no storage */ }
+      if (!refresh) return false;
+      try {
+        const res = await fetch(`${BASE}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+        if (!res.ok) return false;
+        const body = await res.json();
+        setToken(body.access_token, body.refresh_token);
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => { renewing = null; });
+  }
+  return renewing;
+}
+
+/** The sign-in has run out for good: back to the login page. */
+function toLogin(): void {
+  clearToken();
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.replace("/login");
   }
 }
 
@@ -42,7 +82,28 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/**
+ * fetch() with the sign-in token, for file downloads and uploads that cannot
+ * go through `request` (they read a blob, or send FormData). A run-out token
+ * is renewed and the call repeated, just as for `request`.
+ */
+export async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const send = () => {
+    const token = getToken();
+    return fetch(url, {
+      ...init,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init.headers },
+    });
+  };
+  let res = await send();
+  if (res.status === 401) {
+    if (await renew()) res = await send();
+    if (res.status === 401) toLogin();
+  }
+  return res;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const token = getToken();
   // A multipart body must not carry an explicit Content-Type: the browser
   // sets it along with the boundary, and overriding it makes the upload
@@ -68,6 +129,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       `Cannot reach the ERP server at ${BASE}. Check that the backend is running ` +
         `(docker compose ps) and look at its logs (docker compose logs backend).`,
     );
+  }
+
+  // An expired access token: renew it once and repeat the request. The login
+  // request itself answers 401 for a wrong password, which is not renewed.
+  if (res.status === 401 && !path.startsWith("/auth/login")) {
+    if (!retried && (await renew())) return request<T>(path, init, true);
+    toLogin();
   }
 
   if (!res.ok) {

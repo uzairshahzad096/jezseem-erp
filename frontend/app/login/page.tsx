@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Hexagon, Loader2 } from "lucide-react";
-import { api, setToken } from "@/lib/api";
+import { api, getToken, setToken } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,13 +12,19 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Already signed in on this computer: straight to the dashboard. If the
+  // sign-in has run out, the API sends the page back here with it cleared.
+  useEffect(() => {
+    if (getToken()) router.replace("/");
+  }, [router]);
+
   const submit = async () => {
     setError(null);
     setBusy(true);
     try {
-      const { access_token } = await api.login(username, password);
-      setToken(access_token);
-      router.push("/");
+      const { access_token, refresh_token } = await api.login(username, password);
+      setToken(access_token, refresh_token);
+      router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in.");
     } finally {

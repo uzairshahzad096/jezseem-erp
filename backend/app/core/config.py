@@ -35,7 +35,8 @@ class Settings(BaseSettings):
     AUTH_DISABLED: bool = False
     DEV_USER_USERNAME: str = "admin"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Signed in once per computer for a month (owner, 21-Oct-2026); each use renews it.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     JWT_ALGORITHM: str = "HS256"
 
     # --- Database ---
