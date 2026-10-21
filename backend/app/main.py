@@ -54,12 +54,12 @@ if settings.AUTH_DISABLED:
     if settings.ENVIRONMENT.lower() == "production":
         raise RuntimeError(
             "AUTH_DISABLED=true with ENVIRONMENT=production. "
-            "Authentication cannot be bypassed in production â€” set AUTH_DISABLED=false."
+            "Authentication cannot be bypassed in production Ã¢â‚¬â€ set AUTH_DISABLED=false."
         )
     logger.warning(
         "=" * 72 + "\n"
         "  AUTH_DISABLED is ON. Every request runs as '%s' and all\n"
-        "  permission checks pass. Development only â€” set AUTH_DISABLED=false\n"
+        "  permission checks pass. Development only Ã¢â‚¬â€ set AUTH_DISABLED=false\n"
         "  before this system holds real data.\n" + "=" * 72,
         settings.DEV_USER_USERNAME,
     )
@@ -127,13 +127,26 @@ def health_check():
 # them: a browser does not attach the bearer token to an image request, so an
 # authenticated route would leave every picture broken once AUTH_DISABLED is
 # switched off. Filenames are item UUIDs, which are not guessable, but this
-# path performs no permission check â€” anyone who can reach the API and knows
+# path performs no permission check Ã¢â‚¬â€ anyone who can reach the API and knows
 # an item's id can fetch its picture. For an internal ERP behind Nginx that is
 # the intended trade; if product photos ever need to be access-controlled,
 # replace this mount with an authenticated route and have the frontend load
 # images through fetch() into object URLs.
-Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-app.mount(MEDIA_URL_PREFIX, StaticFiles(directory=settings.UPLOAD_DIR), name="media")
+import os
+
+if os.environ.get("VERCEL"):
+    upload_directory = Path("/tmp/jezseem-uploads")
+else:
+    upload_directory = Path(settings.UPLOAD_DIR)
+
+upload_directory.mkdir(parents=True, exist_ok=True)
+
+app.mount(
+    MEDIA_URL_PREFIX,
+    StaticFiles(directory=str(upload_directory)),
+    name="media",
+)
+
 
 
 app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
