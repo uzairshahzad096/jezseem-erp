@@ -137,6 +137,18 @@ def health_check(db: bool = False):
             out["database"] = "failed"
             out["error"] = type(original or exc).__name__
             out["sqlstate"] = getattr(original, "sqlstate", None)
+        # The picture store: whether it is set up and answers, by error code only.
+        from app.inventory import images
+        if not images.r2_enabled():
+            out["pictures"] = "local folder (R2 not configured)"
+        else:
+            from app.core.r2_storage import get_r2_client
+            try:
+                get_r2_client().head_bucket(Bucket=settings.R2_BUCKET_NAME)
+                out["pictures"] = "r2 ok"
+            except Exception as exc:
+                code = getattr(exc, "response", {}).get("Error", {}).get("Code") if hasattr(exc, "response") else None
+                out["pictures"] = f"r2 failed: {type(exc).__name__} {code or ''}".strip()
     return out
 
 
