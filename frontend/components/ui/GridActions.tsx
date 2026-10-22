@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  BarChart3, Check, ChevronDown, ChevronRight, Columns3, Filter, HelpCircle, Highlighter, LayoutList,
+  BarChart3, CalendarDays, Check, ChevronDown, ChevronRight, Columns3, Filter, HelpCircle, Highlighter, LayoutList,
   ListTree, Rows3, Save, Settings2, SortAsc, Table2, Wrench, X,
 } from "lucide-react";
 
@@ -25,10 +25,11 @@ export interface GridColumn<T = unknown> {
   value?: (row: T) => unknown;
 }
 
-type Operator = "contains" | "=" | "!=" | ">" | "<" | ">=" | "<=" | "is empty" | "is not empty";
-const OPERATORS: Operator[] = ["contains", "=", "!=", ">", "<", ">=", "<=", "is empty", "is not empty"];
+type Operator = "contains" | "=" | "!=" | ">" | "<" | ">=" | "<=" | "between" | "is empty" | "is not empty";
+const OPERATORS: Operator[] = ["contains", "=", "!=", ">", "<", ">=", "<=", "between", "is empty", "is not empty"];
 
-interface Rule { id: string; column: string; op: Operator; value: string; enabled: boolean }
+/** `value2` is the upper end of a "between" rule; both ends are included. */
+interface Rule { id: string; column: string; op: Operator; value: string; value2?: string; enabled: boolean }
 interface HighlightRule extends Rule { color: string }
 type Aggregate = "count" | "sum" | "avg" | "min" | "max";
 
@@ -73,11 +74,14 @@ const asNumber = (v: unknown) => {
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
 };
 
-function matches(v: unknown, op: Operator, wanted: string): boolean {
+function matches(v: unknown, op: Operator, wanted: string, wanted2 = ""): boolean {
   const have = text(v).trim();
   if (op === "is empty") return have === "";
   if (op === "is not empty") return have !== "";
   if (op === "contains") return have.toLowerCase().includes(wanted.trim().toLowerCase());
+  // Either end may be left blank: "between 100 and (blank)" is ">= 100".
+  if (op === "between") return (wanted.trim() === "" || matches(v, ">=", wanted))
+    && (wanted2.trim() === "" || matches(v, "<=", wanted2));
   const a = asNumber(v), b = asNumber(wanted);
   const numeric = a != null && b != null && wanted.trim() !== "" && have !== "";
   const cmp = numeric ? (a as number) - (b as number) : have.toLowerCase().localeCompare(wanted.trim().toLowerCase());
@@ -122,7 +126,7 @@ export function useGridActions<T>(storageKey: string, columns: GridColumn<T>[]) 
   /** The loaded rows after the filters and the sort. */
   const apply = (rows: T[]): T[] => {
     let out = rows.filter((row) => settings.filters.every((f) =>
-      !f.enabled || !byKey.has(f.column) || matches(raw(row, byKey.get(f.column)), f.op, f.value)));
+      !f.enabled || !byKey.has(f.column) || matches(raw(row, byKey.get(f.column)), f.op, f.value, f.value2)));
     const sort = settings.sort;
     if (sort && byKey.has(sort.column)) {
       const col = byKey.get(sort.column);
@@ -143,7 +147,7 @@ export function useGridActions<T>(storageKey: string, columns: GridColumn<T>[]) 
   /** The background a highlight rule gives this row, if any. */
   const rowStyle = (row: T): React.CSSProperties | undefined => {
     const hit = settings.highlights.find((h) => h.enabled && byKey.has(h.column)
-      && matches(raw(row, byKey.get(h.column)), h.op, h.value));
+      && matches(raw(row, byKey.get(h.column)), h.op, h.value, h.value2));
     // Dark text on the light highlight colours, so a highlighted row reads in dark mode too.
     return hit ? { backgroundColor: hit.color, color: "#1A1A1A" } : undefined;
   };
@@ -176,10 +180,21 @@ export function useGridActions<T>(storageKey: string, columns: GridColumn<T>[]) 
 export type GridActionsState<T> = ReturnType<typeof useGridActions<T>>;
 
 /** The Actions button and its menu, plus the dialogs behind each entry. */
+/** A server-side date filter offered from the Actions menu: the screen fetches
+ *  only documents dated in the range, e.g. one month's orders. */
+export interface DateRangeFilter {
+  /** Menu label, e.g. "Sale Date range". */
+  label: string;
+  from: string;
+  to: string;
+  onChange: (from: string, to: string) => void;
+}
+
 export function GridActions<T>({
-  state, pageSize, onPageSize, hidden, onToggleColumn, onShowAllColumns,
+  state, pageSize, onPageSize, hidden, onToggleColumn, onShowAllColumns, dateRange,
 }: {
   state: GridActionsState<T>;
+  dateRange?: DateRangeFilter;
   pageSize?: number;
   onPageSize?: (n: number) => void;
   hidden?: Set<string>;
@@ -188,7 +203,7 @@ export function GridActions<T>({
 }) {
   const [open, setOpen] = useState(false);
   const [sub, setSub] = useState<"data" | "format" | "rows" | "report" | null>(null);
-  const [dialog, setDialog] = useState<null | "columns" | "filter" | "sort" | "break" | "highlight" | "chart" | "group" | "pivot" | "help">(null);
+  const [dialog, setDialog] = useState<null | "dates" | "columns" | "filter" | "sort" | "break" | "highlight" | "chart" | "group" | "pivot" | "help">(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const close = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSub(null); } };
@@ -212,6 +227,12 @@ export function GridActions<T>({
         <div className="absolute right-0 z-30 mt-1 w-52 rounded-lg border border-line bg-surface py-1 shadow-xl">
           {onToggleColumn && <button className={item} onClick={() => pick("columns")}><Columns3 size={14} /> Columns</button>}
           <button className={item} onClick={() => pick("filter")}><Filter size={14} /> Filter</button>
+          {dateRange && (
+            <button className={item} onClick={() => pick("dates")}>
+              <CalendarDays size={14} /> {dateRange.label}
+              {(dateRange.from || dateRange.to) && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+            </button>
+          )}
           <div className="relative">
             <button className={subItem("data")} onMouseEnter={() => setSub("data")} onClick={() => setSub("data")}>
               <Table2 size={14} /> Data <ChevronRight size={13} className="ml-auto" /></button>
@@ -282,6 +303,7 @@ export function GridActions<T>({
           {onShowAllColumns && <button onClick={onShowAllColumns} className="mt-3 text-[12px] font-medium text-primary hover:underline">Show all columns</button>}
         </Dialog>
       )}
+      {dialog === "dates" && dateRange && <DateRangeDialog range={dateRange} onClose={() => setDialog(null)} />}
       {(dialog === "filter" || dialog === "highlight") && (
         <RuleDialog state={state} kind={dialog} onClose={() => setDialog(null)} />
       )}
@@ -322,7 +344,8 @@ export function GridActionChips<T>({ state }: { state: GridActionsState<T> }) {
   const remove = (kind: "filter" | "highlight", id: string) => update(kind === "filter"
     ? { filters: settings.filters.filter((f) => f.id !== id) }
     : { highlights: settings.highlights.filter((h) => h.id !== id) });
-  const describe = (c: Rule) => `${byKey.get(c.column)?.label ?? c.column} ${c.op}${c.op.startsWith("is ") ? "" : ` '${c.value}'`}`;
+  const describe = (c: Rule) => `${byKey.get(c.column)?.label ?? c.column} ${c.op}${c.op.startsWith("is ") ? ""
+    : c.op === "between" ? ` '${c.value || "…"}' and '${c.value2 || "…"}'` : ` '${c.value}'`}`;
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-2.5">
       {chips.map((c) => (
@@ -380,15 +403,59 @@ function ColumnSelect<T>({ state, value, onChange, numericOnly, placeholder }: {
   );
 }
 
+/** Last day of a "YYYY-MM" month, as YYYY-MM-DD. */
+const monthEnd = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+};
+
+/** Month, or any From–To range. Picking a month fills From and To with its
+ *  first and last day; the range is applied on the server, so it covers every
+ *  page of the list, not just the rows on screen. */
+function DateRangeDialog({ range, onClose }: { range: DateRangeFilter; onClose: () => void }) {
+  const [from, setFrom] = useState(range.from);
+  const [to, setTo] = useState(range.to);
+  const month = from && to && from.endsWith("-01") && to === monthEnd(from.slice(0, 7)) ? from.slice(0, 7) : "";
+  const apply = (f: string, t: string) => { range.onChange(f, t); onClose(); };
+  return (
+    <Dialog title={range.label} onClose={onClose}>
+      <div className="grid grid-cols-[70px_1fr] items-center gap-x-3 gap-y-2.5 text-[12.5px]">
+        <span className="text-muted">Month</span>
+        <input type="month" className={field} value={month}
+          onChange={(e) => { const ym = e.target.value; setFrom(ym ? `${ym}-01` : ""); setTo(ym ? monthEnd(ym) : ""); }} />
+        <span className="text-muted">From</span>
+        <input type="date" className={field} value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+        <span className="text-muted">To</span>
+        <input type="date" className={field} value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        {(range.from || range.to) && (
+          <button onClick={() => apply("", "")} className="mr-auto rounded-lg px-3 py-1.5 text-[12.5px] text-rose hover:bg-rose/10">
+            Clear dates</button>
+        )}
+        <button onClick={onClose} className="rounded-lg bg-hover px-3.5 py-1.5 text-[12.5px] text-muted">Cancel</button>
+        <button onClick={() => apply(from, to)} disabled={!from && !to}
+          className="rounded-lg bg-primary px-3.5 py-1.5 text-[12.5px] font-medium text-on-primary disabled:opacity-50">Apply</button>
+      </div>
+    </Dialog>
+  );
+}
+
 function RuleDialog<T>({ state, kind, onClose }: { state: GridActionsState<T>; kind: "filter" | "highlight"; onClose: () => void }) {
   const [column, setColumn] = useState("");
   const [op, setOp] = useState<Operator>(kind === "filter" ? "contains" : "=");
   const [value, setValue] = useState("");
+  const [value2, setValue2] = useState("");
   const [color, setColor] = useState(COLORS[0].value);
+  // A date column gets date pickers, so "between" reads 1 Sep … 30 Sep
+  // instead of hand-typed text that would not compare as dates.
+  const isDate = /date/i.test(column);
+  const between = op === "between";
   const add = () => {
     if (!column) return;
-    if (kind === "filter") state.update({ filters: [...state.settings.filters, { id: uid(), column, op, value, enabled: true }] });
-    else state.update({ highlights: [...state.settings.highlights, { id: uid(), column, op, value, enabled: true, color }] });
+    const ends = between ? { value, value2 } : { value };
+    if (kind === "filter") state.update({ filters: [...state.settings.filters, { id: uid(), column, op, ...ends, enabled: true }] });
+    else state.update({ highlights: [...state.settings.highlights, { id: uid(), column, op, ...ends, enabled: true, color }] });
     onClose();
   };
   return (
@@ -398,9 +465,18 @@ function RuleDialog<T>({ state, kind, onClose }: { state: GridActionsState<T>; k
         <select className={field} value={op} onChange={(e) => setOp(e.target.value as Operator)}>
           {OPERATORS.map((o) => <option key={o}>{o}</option>)}
         </select>
-        <input className={field} value={value} disabled={op.startsWith("is ")} placeholder="Value"
+        <input className={field} value={value} disabled={op.startsWith("is ")} placeholder={between ? "From" : "Value"}
+          type={isDate ? "date" : "text"}
           onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
       </div>
+      {between && (
+        <div className="mt-2 grid grid-cols-[1.4fr_1fr_1.4fr] items-center gap-2">
+          <span />
+          <span className="text-right text-[12px] text-muted">and</span>
+          <input className={field} value={value2} placeholder="To" type={isDate ? "date" : "text"}
+            onChange={(e) => setValue2(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+        </div>
+      )}
       {kind === "highlight" && (
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px]">
           <span className="text-muted">Row colour</span>
