@@ -164,10 +164,10 @@ export default function DashboardPage() {
               <Big href="/inventory/reports/product-sales" icon={<ShoppingCart size={18} />} tone="from-primary to-primary-dark"
                 label="Sales this month" value={`PKR ${short(k.sales_month)}`}
                 delta={k.sales_month_delta} deltaNote="vs same days last month"
-                note={`${k.sales_month_orders} orders · last month PKR ${short(k.sales_last_month)}`} />
+                note={`${k.sales_month_orders} invoices · last month PKR ${short(k.sales_last_month)}`} />
               <Big href="/finance" icon={<TrendingUp size={18} />} tone="from-sky to-[#2f6fb8]"
                 label={`Sales this year${data.financial_year ? ` (FY ${data.financial_year})` : ""}`} value={`PKR ${short(k.sales_year)}`}
-                delta={k.sales_year_delta} deltaNote="vs last year to date" note={`${k.sales_year_orders} orders since ${day(data.fy_start)}`} />
+                delta={k.sales_year_delta} deltaNote="vs last year to date" note={`${k.sales_year_orders} invoices since ${day(data.fy_start)}`} />
               <Big href="/finance/aging" icon={<ReceiptText size={18} />} tone="from-violet to-[#6b3fc9]"
                 label="Customers owe us" value={`PKR ${short(k.receivables)}`}
                 note={`PKR ${short(k.received_month)} collected this month`} />
@@ -190,7 +190,7 @@ export default function DashboardPage() {
 
             {/* sales trend and best customers */}
             <section className="mb-[18px] grid grid-cols-[1fr_380px] gap-[18px] max-[1250px]:grid-cols-1">
-              <Panel title="Sales — last 12 months" note="from posted sales orders, against the same months a year before">
+              <Panel title="Sales — last 12 months" note="from the finance books, before sales tax, against the same months a year before">
                 {trend && <EChart option={trend} height={290} themeKey={theme} />}
               </Panel>
               <Panel title="Best customers this year" link={["/crm/customers", "All customers"]}>

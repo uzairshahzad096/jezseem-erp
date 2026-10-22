@@ -37,12 +37,18 @@ def _month_start(d: date, back: int = 0) -> date:
     return date(d.year + m // 12, m % 12 + 1, 1)
 
 
-def _sales(db: Session, company_id: uuid.UUID, start: date, end: date) -> tuple[float, int]:
-    total, count = db.execute(select(func.coalesce(func.sum(SalesDocument.net_receivable), 0), func.count())
-                              .where(SalesDocument.company_id == company_id, SalesDocument.doc_type == SALES_ORDER,
-                                     SalesDocument.status.in_(IN_SALES), SalesDocument.doc_date >= start,
-                                     SalesDocument.doc_date <= end)).one()
-    return float(total or 0), int(count or 0)
+def _sales(db: Session, ctx: FinanceContext, start: date, end: date) -> tuple[float, int]:
+    """Sales before tax from the books, and the invoices behind them: the same
+    figures as the Finance dashboard (owner, 22-Oct-2026)."""
+    total, invoices = ledger.sales_between(db, ctx, start, end)
+    return float(total), invoices
+
+
+def _year_ago(d: date) -> date:
+    try:
+        return d.replace(year=d.year - 1)
+    except ValueError:  # 29 February
+        return d.replace(year=d.year - 1, day=28)
 
 
 def _delta(now: float, before: float) -> float | None:
@@ -60,24 +66,18 @@ def overview(db: Session, company_id: uuid.UUID, user) -> dict:
     month_start = _month_start(today)
     last_start = _month_start(today, 1)
     last_same_day = min(today.replace(day=1) - timedelta(days=1), last_start + (today - month_start))
-    month, month_orders = _sales(db, company_id, month_start, today)
-    last_month_to_date, _ = _sales(db, company_id, last_start, last_same_day)
-    last_month_full, _ = _sales(db, company_id, last_start, month_start - timedelta(days=1))
-    year, year_orders = _sales(db, company_id, fy_start, today)
+    month, month_orders = _sales(db, ctx, month_start, today)
+    last_month_to_date, _ = _sales(db, ctx, last_start, last_same_day)
+    last_month_full, _ = _sales(db, ctx, last_start, month_start - timedelta(days=1))
+    year, year_orders = _sales(db, ctx, fy_start, today)
     prev_fy_start = date(fy_start.year - 1, fy_start.month, fy_start.day)
-    prev_year_to_date, _ = _sales(db, company_id, prev_fy_start, date(today.year - 1, today.month, min(today.day, 28)))
+    prev_year_to_date, _ = _sales(db, ctx, prev_fy_start, _year_ago(today))
 
     # ---- sales by month: the last 12, with the same months a year before
     months = [_month_start(today, back) for back in range(11, -1, -1)]
-    def by_month(first: date) -> dict:
-        bucket = func.date_trunc("month", SalesDocument.doc_date)
-        rows = db.execute(select(bucket, func.sum(SalesDocument.net_receivable))
-                          .where(SalesDocument.company_id == company_id, SalesDocument.doc_type == SALES_ORDER,
-                                 SalesDocument.status.in_(IN_SALES), SalesDocument.doc_date >= first)
-                          .group_by(bucket)).all()
-        return {(d.year, d.month): float(v or 0) for d, v in rows}
-    this_year = by_month(months[0])
-    prior = by_month(date(months[0].year - 1, months[0].month, 1))
+    ledger_months = {k: float(v) for k, v in
+                     ledger.sales_by_month(db, ctx, date(months[0].year - 1, months[0].month, 1)).items()}
+    this_year = prior = ledger_months
 
     # ---- stock
     stock_rows = valuation.rows(db, company_id)
