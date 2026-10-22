@@ -75,9 +75,17 @@ def overview(db: Session, company_id: uuid.UUID, user) -> dict:
 
     # ---- sales by month: the last 12, with the same months a year before
     months = [_month_start(today, back) for back in range(11, -1, -1)]
-    ledger_months = {k: float(v) for k, v in
-                     ledger.sales_by_month(db, ctx, date(months[0].year - 1, months[0].month, 1)).items()}
-    this_year = prior = ledger_months
+    # The graph is the sum of Net Receivable (with tax) of each month's invoices,
+    # i.e. posted sale orders by sale date (owner, 22-Oct-2026). The cards above
+    # it come from the books, before tax.
+    bucket = func.date_trunc("month", SalesDocument.doc_date)
+    invoiced = {(d.year, d.month): float(v or 0) for d, v in db.execute(
+        select(bucket, func.sum(SalesDocument.net_receivable * func.coalesce(SalesDocument.exchange_rate, 1)))
+        .where(SalesDocument.company_id == company_id, SalesDocument.doc_type == SALES_ORDER,
+               SalesDocument.status.in_(IN_SALES),
+               SalesDocument.doc_date >= date(months[0].year - 1, months[0].month, 1))
+        .group_by(bucket))}
+    this_year = prior = invoiced
 
     # ---- stock
     stock_rows = valuation.rows(db, company_id)

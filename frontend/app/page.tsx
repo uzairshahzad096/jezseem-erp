@@ -190,7 +190,7 @@ export default function DashboardPage() {
 
             {/* sales trend and best customers */}
             <section className="mb-[18px] grid grid-cols-[1fr_380px] gap-[18px] max-[1250px]:grid-cols-1">
-              <Panel title="Sales — last 12 months" note="from the finance books, before sales tax, against the same months a year before">
+              <Panel title="Sales — last 12 months" note="Net Receivable of each month's invoices, with tax, against the same months a year before">
                 {trend && <EChart option={trend} height={290} themeKey={theme} />}
               </Panel>
               <Panel title="Best customers this year" link={["/crm/customers", "All customers"]}>
