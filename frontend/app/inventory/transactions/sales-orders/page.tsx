@@ -22,6 +22,9 @@ import {
 import { api } from "@/lib/api";
 import { money } from "@/lib/currency";
 
+/** Compact rows: heading and data share one height and type size (owner, 22-Oct-2026). */
+const denseCell = (numeric?: boolean, extra = "") => gridCellClass(numeric, extra, true);
+
 const STATUSES = ["Draft", "Posted", "Delivered", "Cancelled"];
 
 /**
@@ -79,7 +82,7 @@ const COLUMNS: {
   { key: "total_items", label: "Total Items", numeric: true, render: (q) => q.total_items },
   { key: "detail_items", label: "Detail Items",
     render: (q) => (q.detail_items
-      ? <span className="line-clamp-2">{q.detail_items}</span>
+      ? <span className="block max-w-[300px] truncate" title={q.detail_items}>{q.detail_items}</span>
       : <span className="text-faint">—</span>) },
 ];
 
@@ -393,16 +396,16 @@ function SalesOrders() {
                  style={{ minWidth: `${420 + visible.length * 130}px` }}>
             <thead>
               <tr className="border-b border-line">
-                <GridTh>Edit</GridTh>
-                <GridTh>Print</GridTh>
+                <GridTh dense>Edit</GridTh>
+                <GridTh dense>Print</GridTh>
                 {visible.map((c) => (
-                  <GridTh key={c.key} numeric={c.numeric} sortKey={c.sort}
+                  <GridTh dense key={c.key} numeric={c.numeric} sortKey={c.sort}
                           sort={list.sort} direction={list.direction}
                           onSort={list.toggleSort}>
                     {c.label}
                   </GridTh>
                 ))}
-                <GridTh> </GridTh>
+                <GridTh dense> </GridTh>
               </tr>
             </thead>
             <tbody>
@@ -425,14 +428,14 @@ function SalesOrders() {
                       {actions.breakBefore(shown, index)}</td>
                   </tr>
                 )}
-                <tr className={`align-top ${gridRowClass(index)}`} style={actions.rowStyle(q)}>
-                  <td className={gridCellClass()}>
+                <tr className={gridRowClass(index)} style={actions.rowStyle(q)}>
+                  <td className={denseCell()}>
                     <button onClick={() => openEdit(q.id)} aria-label="Edit" title="Edit"
-                      className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary">
+                      className="rounded-md p-1 text-muted hover:bg-primary/10 hover:text-primary">
                       <Pencil size={14} />
                     </button>
                   </td>
-                  <td className={gridCellClass()}>
+                  <td className={denseCell()}>
                     <div className="flex items-center gap-1.5">
                       {q.is_service ? (
                         // A service order prints a Service Invoice, in its own colour.
@@ -455,7 +458,7 @@ function SalesOrders() {
 
                   {visible.map((c) => (
                     <td key={c.key}
-                        className={gridCellClass(c.numeric,
+                        className={denseCell(c.numeric,
                           c.key === "detail_items" ? "max-w-[280px]"
                             : c.key === "remarks" ? "max-w-[200px] truncate text-muted" : "")}
                         title={c.key === "remarks" ? q.remarks ?? "" : undefined}>
@@ -463,7 +466,7 @@ function SalesOrders() {
                     </td>
                   ))}
 
-                  <td className={gridCellClass()}>
+                  <td className={denseCell()}>
                     <div className="flex items-center gap-1.5">
 
                       {(q.status === "Posted" || q.status === "Delivered") && (
@@ -638,8 +641,8 @@ function PrintIcon({ color, title, onClick, pdf }: {
   const Icon = pdf ? FileText : Printer;
   return (
     <button onClick={onClick} title={title} aria-label={title}
-      className={`rounded-full p-1.5 transition-colors ${styles}`}>
-      <Icon size={13} />
+      className={`rounded-full p-1 transition-colors ${styles}`}>
+      <Icon size={12} />
     </button>
   );
 }

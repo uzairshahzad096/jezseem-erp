@@ -53,7 +53,7 @@ export function GridHeader({
  * hover says "and this one sorts".
  */
 export function GridTh({
-  children, numeric, sortKey, sort, direction, onSort, className = "",
+  children, numeric, sortKey, sort, direction, onSort, className = "", dense = false,
 }: {
   children: React.ReactNode;
   numeric?: boolean;
@@ -62,11 +62,15 @@ export function GridTh({
   direction?: "asc" | "desc";
   onSort?: (key: string) => void;
   className?: string;
+  /** Compact lists (sale orders, quotations): the heading takes the same
+   *  height and type size as the rows below it. */
+  dense?: boolean;
 }) {
   const active = Boolean(sortKey) && sort === sortKey;
   return (
-    <th className={`border-r border-line px-4 py-3 align-bottom text-[11.5px] font-semibold
-                    last:border-r-0 ${numeric ? "text-right" : ""} ${className}`}>
+    <th className={`border-r border-line font-semibold last:border-r-0 ${dense
+                      ? "whitespace-nowrap px-2.5 py-1.5 align-middle text-[12px]"
+                      : "px-4 py-3 align-bottom text-[11.5px]"} ${numeric ? "text-right" : ""} ${className}`}>
       {sortKey && onSort ? (
         <button
           onClick={() => onSort(sortKey)}
@@ -90,8 +94,9 @@ export function gridRowClass(index: number): string {
 }
 
 /** A body cell: ruled, with numbers right-aligned on figures. */
-export function gridCellClass(numeric?: boolean, extra = ""): string {
-  return `border-r border-line px-4 py-2.5 text-[12.5px] last:border-r-0 ${
+export function gridCellClass(numeric?: boolean, extra = "", dense = false): string {
+  return `border-r border-line last:border-r-0 ${dense
+    ? "whitespace-nowrap px-2.5 py-1.5 align-middle text-[12px]" : "px-4 py-2.5 text-[12.5px]"} ${
     numeric ? "whitespace-nowrap text-right tabular-nums" : ""} ${extra}`;
 }
 
