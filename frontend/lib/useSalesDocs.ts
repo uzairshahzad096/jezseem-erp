@@ -81,6 +81,9 @@ export function useSalesDocs(
   // from a report's Doc Id link, the first request should already be narrowed.
   const [search, setSearch] = useState(initialSearch);
   const [statuses, setStatuses] = useState<string[]>(initialStatuses);
+  // A date range on the document date, e.g. one month's orders (owner, 22-Oct-2026).
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [sort, setSort] = useState("doc_date");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
@@ -95,6 +98,8 @@ export function useSalesDocs(
       });
       if (search) qs.set("search", search);
       statuses.forEach((s) => qs.append("status", s));
+      if (dateFrom) qs.set("date_from", dateFrom);
+      if (dateTo) qs.set("date_to", dateTo);
       const data = await api.get<{ items: SalesDocSummary[]; total: number }>(`${path}?${qs}`);
       setRows(data.items);
       setTotal(data.total);
@@ -105,7 +110,7 @@ export function useSalesDocs(
     } finally {
       setLoading(false);
     }
-  }, [path, page, pageSize, search, statuses, sort, direction]);
+  }, [path, page, pageSize, search, statuses, dateFrom, dateTo, sort, direction]);
 
   useEffect(() => {
     const t = setTimeout(load, search ? 300 : 0);
@@ -128,6 +133,8 @@ export function useSalesDocs(
   const reset = () => {
     setSearch(initialSearch);
     setStatuses(initialStatuses);
+    setDateFrom("");
+    setDateTo("");
     setSort("doc_date");
     setDirection("desc");
     setPage(1);
@@ -136,11 +143,13 @@ export function useSalesDocs(
   const dirty =
     search !== initialSearch ||
     statuses.join() !== initialStatuses.join() ||
+    Boolean(dateFrom || dateTo) ||
     sort !== "doc_date" || direction !== "desc";
 
   return {
-    rows, total, page, pageSize, search, statuses, sort, direction, loading, error,
+    rows, total, page, pageSize, search, statuses, dateFrom, dateTo, sort, direction, loading, error,
     setPage, setSearch: (v: string) => { setSearch(v); setPage(1); },
+    setDateRange: (from: string, to: string) => { setDateFrom(from); setDateTo(to); setPage(1); },
     toggleStatus, toggleSort, reload: load, reset, dirty,
     setPageSize: (n: number) => { setPageSize(n); setPage(1); },
   };

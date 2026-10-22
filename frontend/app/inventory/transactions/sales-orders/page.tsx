@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  Printer, FileText, Pencil, Plus, Search, Loader2, ArrowRightLeft,
+  Printer, FileText, Pencil, Plus, Search, Loader2, ArrowRightLeft, CalendarDays, X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +24,12 @@ import { money } from "@/lib/currency";
 
 /** Compact rows: heading and data share one height and type size (owner, 22-Oct-2026). */
 const denseCell = (numeric?: boolean, extra = "") => gridCellClass(numeric, extra, true);
+const dateBox = "rounded-md border border-line bg-bg px-2 py-1 text-[11.5px] text-text outline-none focus:border-primary";
+/** Last day of a "YYYY-MM" month, as YYYY-MM-DD. */
+const monthEnd = (ym: string) => {
+  const [y, m] = ym.split("-").map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+};
 
 const STATUSES = ["Draft", "Posted", "Delivered", "Cancelled"];
 
@@ -324,7 +330,17 @@ function SalesOrders() {
   const exportQuery = new URLSearchParams([
     ...(list.search ? [["search", list.search]] : []),
     ...list.statuses.map((s) => ["status", s] as [string, string]),
+    ...(list.dateFrom ? [["date_from", list.dateFrom]] : []),
+    ...(list.dateTo ? [["date_to", list.dateTo]] : []),
   ]).toString();
+
+  // The Month box is a shortcut for the From/To range: picking 2026-09 sets
+  // 1 Sep to 30 Sep, and it shows the month again only while the range is
+  // exactly one whole month.
+  const monthOf = (from: string, to: string) =>
+    from && to && from.endsWith("-01") && from.slice(0, 7) === to.slice(0, 7) && to === monthEnd(from.slice(0, 7))
+      ? from.slice(0, 7) : "";
+  const pickMonth = (ym: string) => (ym ? list.setDateRange(`${ym}-01`, monthEnd(ym)) : list.setDateRange("", ""));
 
   return (
     <AppShell title="Product Sale Order">
@@ -382,6 +398,27 @@ function SalesOrders() {
                 {s}
               </button>
             ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted">
+            <CalendarDays size={14} className="text-faint" />
+            <label className="flex items-center gap-1.5">Month
+              <input type="month" value={monthOf(list.dateFrom, list.dateTo)}
+                onChange={(e) => pickMonth(e.target.value)} className={dateBox} />
+            </label>
+            <label className="flex items-center gap-1.5">From
+              <input type="date" value={list.dateFrom} max={list.dateTo || undefined}
+                onChange={(e) => list.setDateRange(e.target.value, list.dateTo)} className={dateBox} />
+            </label>
+            <label className="flex items-center gap-1.5">To
+              <input type="date" value={list.dateTo} min={list.dateFrom || undefined}
+                onChange={(e) => list.setDateRange(list.dateFrom, e.target.value)} className={dateBox} />
+            </label>
+            {(list.dateFrom || list.dateTo) && (
+              <button onClick={() => list.setDateRange("", "")} title="Clear dates" aria-label="Clear dates"
+                className="rounded-md p-1 text-faint hover:bg-rose/10 hover:text-rose">
+                <X size={13} />
+              </button>
+            )}
           </div>
         </div>
 
