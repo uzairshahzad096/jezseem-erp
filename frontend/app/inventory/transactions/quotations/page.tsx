@@ -8,7 +8,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import {
-  SalesDocumentForm, emptyHeader, emptyLine,
+  SalesDocumentForm, emptyHeader, emptyLine, DEFAULT_ORDER_LOCATION,
   type DocHeader, type DocLine, type Customer,
 } from "@/components/sales/SalesDocumentForm";
 import { useSalesDocs, openDocumentPdf,
@@ -246,7 +246,8 @@ export default function QuotationsPage() {
       `and this quotation will be marked Closed.`
     )) return;
     try {
-      const order = await api.post<{ doc_number: string }>(`/sales/quotations/${id}/convert`, {});
+      const order = await api.post<{ doc_number: string }>(`/sales/quotations/${id}/convert`,
+        { location: DEFAULT_ORDER_LOCATION });
       alert(`Sales order ${order.doc_number} created.`);
       router.push("/inventory/transactions/sales-orders");
     } catch (err) {

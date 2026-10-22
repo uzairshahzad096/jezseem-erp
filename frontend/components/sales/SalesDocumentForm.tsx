@@ -70,6 +70,10 @@ export const emptyLine = (currency = DEFAULT_CURRENCY): DocLine => ({
   currency, rack_name: null, stock: null, last_rate: null, sale_rate: null,
 });
 
+/** The location a new or converted sales order starts with; the user may pick
+ *  another (owner, 22-Oct-2026). Must match the name in Item Locations. */
+export const DEFAULT_ORDER_LOCATION = "JEZ FSD";
+
 export const emptyHeader = (): DocHeader => ({
   doc_date: new Date().toISOString().slice(0, 10),
   customer_id: "", status: "Draft", remarks: "", demand_number: "", dc_number: "",

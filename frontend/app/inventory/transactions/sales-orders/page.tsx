@@ -8,7 +8,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { Modal } from "@/components/ui/Modal";
 import {
-  SalesDocumentForm, emptyHeader, emptyLine,
+  SalesDocumentForm, emptyHeader, emptyLine, DEFAULT_ORDER_LOCATION,
   type DocHeader, type DocLine, type Customer,
 } from "@/components/sales/SalesDocumentForm";
 import { useSalesDocs, openDocumentPdf,
@@ -158,7 +158,7 @@ function SalesOrders() {
   const openNew = () => {
     setEditingId(null);
     setSource(null);
-    setHeader(emptyHeader());
+    setHeader({ ...emptyHeader(), location: DEFAULT_ORDER_LOCATION });
     setLines([emptyLine()]);
     setFormError(null);
     setOpen(true);
@@ -175,6 +175,7 @@ function SalesOrders() {
       setSource({ id: q.id, doc_number: docNumber });
       setHeader({
         ...emptyHeader(),
+        location: DEFAULT_ORDER_LOCATION,
         customer_id: q.customer_id,
         remarks: q.remarks ?? "",
         demand_number: q.demand_number ?? "",
