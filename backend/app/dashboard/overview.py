@@ -37,11 +37,17 @@ def _month_start(d: date, back: int = 0) -> date:
     return date(d.year + m // 12, m % 12 + 1, 1)
 
 
-def _sales(db: Session, ctx: FinanceContext, start: date, end: date) -> tuple[float, int]:
-    """Sales before tax from the books, and the invoices behind them: the same
-    figures as the Finance dashboard (owner, 22-Oct-2026)."""
-    total, invoices = ledger.sales_between(db, ctx, start, end)
-    return float(total), invoices
+def _sales(db: Session, company_id: uuid.UUID, start: date, end: date) -> tuple[float, int]:
+    """Sum of Net Receivable (with tax) of posted sale orders, i.e. the
+    invoices, dated in the range, and how many there are. Nothing from the
+    finance books (owner, 22-Oct-2026)."""
+    total, count = db.execute(select(
+        func.coalesce(func.sum(SalesDocument.net_receivable * func.coalesce(SalesDocument.exchange_rate, 1)), 0),
+        func.count())
+        .where(SalesDocument.company_id == company_id, SalesDocument.doc_type == SALES_ORDER,
+               SalesDocument.status.in_(IN_SALES), SalesDocument.doc_date >= start,
+               SalesDocument.doc_date <= end)).one()
+    return float(total or 0), int(count or 0)
 
 
 def _year_ago(d: date) -> date:
@@ -66,18 +72,17 @@ def overview(db: Session, company_id: uuid.UUID, user) -> dict:
     month_start = _month_start(today)
     last_start = _month_start(today, 1)
     last_same_day = min(today.replace(day=1) - timedelta(days=1), last_start + (today - month_start))
-    month, month_orders = _sales(db, ctx, month_start, today)
-    last_month_to_date, _ = _sales(db, ctx, last_start, last_same_day)
-    last_month_full, _ = _sales(db, ctx, last_start, month_start - timedelta(days=1))
-    year, year_orders = _sales(db, ctx, fy_start, today)
+    month, month_orders = _sales(db, company_id, month_start, today)
+    last_month_to_date, _ = _sales(db, company_id, last_start, last_same_day)
+    last_month_full, _ = _sales(db, company_id, last_start, month_start - timedelta(days=1))
+    year, year_orders = _sales(db, company_id, fy_start, today)
     prev_fy_start = date(fy_start.year - 1, fy_start.month, fy_start.day)
-    prev_year_to_date, _ = _sales(db, ctx, prev_fy_start, _year_ago(today))
+    prev_year_to_date, _ = _sales(db, company_id, prev_fy_start, _year_ago(today))
 
     # ---- sales by month: the last 12, with the same months a year before
     months = [_month_start(today, back) for back in range(11, -1, -1)]
-    # The graph is the sum of Net Receivable (with tax) of each month's invoices,
-    # i.e. posted sale orders by sale date (owner, 22-Oct-2026). The cards above
-    # it come from the books, before tax.
+    # The graph, like the cards, is the sum of Net Receivable (with tax) of each
+    # month's invoices, i.e. posted sale orders by sale date (owner, 22-Oct-2026).
     bucket = func.date_trunc("month", SalesDocument.doc_date)
     invoiced = {(d.year, d.month): float(v or 0) for d, v in db.execute(
         select(bucket, func.sum(SalesDocument.net_receivable * func.coalesce(SalesDocument.exchange_rate, 1)))

@@ -619,44 +619,6 @@ def dashboard(db: Session, ctx: FinanceContext, today: date | None = None) -> di
 SALES_EVENTS = ("SALES_INVOICE_POSTED", "SALES_CREDIT_NOTE_POSTED", "SALES_DEBIT_NOTE_POSTED")
 
 
-def sales_between(db: Session, ctx: FinanceContext, start: date, end: date) -> tuple[Decimal, int]:
-    """Sales before tax from the ledger between two dates, counted exactly as
-    sales_summary counts them, and the number of invoices behind them. The
-    home dashboard uses this so its figures agree with the books (owner,
-    22-Oct-2026)."""
-    net = JournalEntryLine.base_credit - JournalEntryLine.base_debit
-    stmt = (select(func.coalesce(func.sum(case((AccountType.code == "REVENUE", net), else_=0)), 0),
-                   func.count(func.distinct(case((and_(JournalEntry.event_code == "SALES_INVOICE_POSTED",
-                                                       JournalEntry.status == POSTED,
-                                                       JournalEntry.document_type.in_(("SALES_ORDER", "SALES_INVOICE",
-                                                                                       "SERVICE_INVOICE")),
-                                                       JournalEntry.journal_type != REVERSAL),
-                                                  JournalEntry.id)))))
-            .select_from(JournalEntryLine)
-            .join(JournalEntry, JournalEntry.id == JournalEntryLine.journal_entry_id)
-            .join(Account, Account.id == JournalEntryLine.account_id)
-            .join(AccountType, AccountType.id == Account.account_type_id)
-            .where(JournalEntry.company_id == ctx.company_id, JournalEntry.status.in_(LEDGER_STATUSES),
-                   JournalEntry.event_code.in_(SALES_EVENTS),
-                   JournalEntry.journal_date >= start, JournalEntry.journal_date <= end))
-    condition = ctx.branch_condition(JournalEntryLine.branch_id)
-    if condition is not None:
-        stmt = stmt.where(condition)
-    sales, invoices = db.execute(stmt).one()
-    return Decimal(sales), int(invoices or 0)
-
-
-def sales_by_month(db: Session, ctx: FinanceContext, start: date) -> dict[tuple[int, int], Decimal]:
-    """Ledger sales before tax per calendar month from `start` on, keyed (year, month)."""
-    out: dict[tuple[int, int], Decimal] = {}
-    for year in sales_summary(db, ctx)["years"]:
-        for m in year["months"]:
-            first = m["month"]
-            if first >= start:
-                out[(first.year, first.month)] = out.get((first.year, first.month), ZERO) + m["sales"]
-    return out
-
-
 def sales_summary(db: Session, ctx: FinanceContext) -> dict:
     """Sales from the ledger, by financial year and by month: what invoices,
     credit notes and debit notes put on the revenue accounts (net of returns)
