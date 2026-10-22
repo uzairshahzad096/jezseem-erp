@@ -62,14 +62,14 @@ export function GridTh({
   direction?: "asc" | "desc";
   onSort?: (key: string) => void;
   className?: string;
-  /** Compact lists (sale orders, quotations): the heading takes the same
-   *  height and type size as the rows below it. */
+  /** Compact lists (sale orders, quotations): the heading has the rows' type
+   *  size, a little more height and a light tint (owner, 22-Oct-2026). */
   dense?: boolean;
 }) {
   const active = Boolean(sortKey) && sort === sortKey;
   return (
     <th className={`border-r border-line font-semibold last:border-r-0 ${dense
-                      ? "whitespace-nowrap px-2.5 py-1.5 align-middle text-[12px]"
+                      ? "whitespace-nowrap bg-primary/[0.07] px-2.5 py-2.5 align-middle text-[12px]"
                       : "px-4 py-3 align-bottom text-[11.5px]"} ${numeric ? "text-right" : ""} ${className}`}>
       {sortKey && onSort ? (
         <button
