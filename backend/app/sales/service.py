@@ -336,37 +336,62 @@ def resolve_location(db: Session, company_id: uuid.UUID, name: str | None) -> uu
     )
 
 
-def post_sales_order_stock(db: Session, order: SalesDocument, user_id: uuid.UUID) -> int:
-    """Write the outward stock movements for a posted sales order.
+#: Order statuses at which the goods have gone: stock is reduced by the lines.
+STOCK_OUT_STATUSES = ("Posted", "Delivered")
+_ORDER_STOCK_SOURCES = ("sales_order", "sales_order_reversal")
 
-    The stock comes off the location the order ships from, so a sale at
-    Jezseem FSD reduces Jezseem FSD rather than an undifferentiated pool.
 
-    Called inside the router's transaction so the status change and the
-    ledger entries commit together (spec section 21 rule 11).
+def sync_order_stock(db: Session, order: SalesDocument, user_id: uuid.UUID) -> int:
+    """Make the order's stock movements match what it says now (owner,
+    24-Oct-2026): a Posted or Delivered order takes each item's quantity off
+    the location it ships from; a Draft or Cancelled one takes nothing off.
+
+    Called on every save, so saving straight as Posted, editing a posted
+    order's quantities or location, and cancelling it all leave stock right.
+    The difference is written as new entries (an OUT for more goods gone, an
+    IN reversal for goods put back); earlier entries are never changed.
+    Called inside the router's transaction (spec section 21 rule 11).
     """
-    location_id = resolve_location(db, order.company_id, order.location)
+    from collections import defaultdict
+
+    from app.inventory.stock import StockLedgerEntry
+
+    db.flush()
+    target: dict[tuple, Decimal] = defaultdict(Decimal)
+    price: dict = {}
+    if order.status in STOCK_OUT_STATUSES:
+        location_id = resolve_location(db, order.company_id, order.location)
+        for line in order.lines:
+            if line.item_id is not None and line.quantity:
+                target[(line.item_id, location_id)] += Decimal(line.quantity)
+                price[line.item_id] = line.unit_price
+
+    current: dict[tuple, Decimal] = defaultdict(Decimal)
+    for e in db.scalars(select(StockLedgerEntry).where(
+            StockLedgerEntry.source_id == order.id,
+            StockLedgerEntry.source_type.in_(_ORDER_STOCK_SOURCES))):
+        current[(e.item_id, e.location_id)] += e.quantity if e.direction == stock.OUT else -e.quantity
 
     written = 0
-    for line in order.lines:
-        if line.item_id is None:
+    for key in set(target) | set(current):
+        diff = target[key] - current[key]
+        if diff == 0:
             continue
+        item_id, location_id = key
+        first_time = not any(current.values())
         stock.post_movement(
-            db,
-            company_id=order.company_id,
-            item_id=line.item_id,
-            direction=stock.OUT,
-            quantity=line.quantity,
-            source_type="sales_order",
-            source_id=order.id,
-            source_number=order.doc_number,
-            entry_date=order.doc_date,
-            unit_cost=line.unit_price,
-            user_id=user_id,
-            location_id=location_id,
+            db, company_id=order.company_id, item_id=item_id,
+            direction=stock.OUT if diff > 0 else stock.IN, quantity=abs(diff),
+            source_type="sales_order" if diff > 0 else "sales_order_reversal",
+            source_id=order.id, source_number=order.doc_number,
+            # The first posting is dated with the sale; later corrections today.
+            entry_date=order.doc_date if first_time else date.today(),
+            unit_cost=price.get(item_id), user_id=user_id, location_id=location_id,
+            remarks=None if first_time else f"Order {order.status.lower()} / changed",
         )
-        line.delivered_quantity = line.quantity
         written += 1
+    for line in order.lines:
+        line.delivered_quantity = line.quantity if order.status in STOCK_OUT_STATUSES else Decimal("0")
     return written
 
 

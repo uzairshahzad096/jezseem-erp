@@ -977,6 +977,36 @@ def test_sales_order_may_exceed_stock(client, db):
     assert made.json()["status"] == "Posted"
 
 
+def test_invoice_takes_item_quantity_off_stock(client, db):
+    """An order saved straight as Posted reduces stock by each line's quantity,
+    an edit changes it by the difference, and cancelling puts it back (owner, 24-Oct-2026)."""
+    from app.inventory.models import InventoryItem
+    from app.inventory.router import active_company_id
+    from app.inventory.stock import stock_balance
+    from app.partners.models import BusinessPartner
+    company_id = active_company_id(db)
+    item = InventoryItem(company_id=company_id, item_code=f"SO-{uuid.uuid4().hex[:6]}", description="Cutter blade")
+    buyer = BusinessPartner(company_id=company_id, code=f"T-{uuid.uuid4().hex[:8]}", name="Stock Buyer",
+                            is_customer=True, is_supplier=False)
+    db.add_all([item, buyer])
+    db.flush()
+    line = {"item_id": str(item.id), "description": "Blade", "quantity": "3", "unit_price": "1000"}
+    body = {"doc_date": "2026-10-24", "customer_id": str(buyer.id), "status": "Posted",
+            "with_sales_tax": False, "lines": [line]}
+    made = client.post("/api/v1/sales/orders", json=body)
+    assert made.status_code == 201, made.text
+    assert stock_balance(db, company_id, item.id) == -3
+    # Saving again changes nothing; a draft never moved stock in the first place.
+    order_id = made.json()["id"]
+    assert client.put(f"/api/v1/sales/orders/{order_id}", json=body).status_code == 200
+    assert stock_balance(db, company_id, item.id) == -3
+    assert client.post(f"/api/v1/sales/orders/{order_id}/status", json={"status": "Cancelled"}).status_code == 200
+    assert stock_balance(db, company_id, item.id) == 0
+    draft = client.post("/api/v1/sales/orders", json={**body, "status": "Draft"})
+    assert draft.status_code == 201
+    assert stock_balance(db, company_id, item.id) == 0
+
+
 def test_purchase_order_saves_with_boxes_left_empty(client, db):
     """Freight, dates and other optional boxes left empty on the form arrive as "";
     the order still saves, with those treated as not filled in (owner, 19-Oct-2026)."""

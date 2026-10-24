@@ -311,6 +311,10 @@ def _create(doc_type: str, permission: str):
             payload.freight_amount, payload.document_discount,
         )
         db.add(doc)
+        if doc_type == SALES_ORDER:
+            # Saved straight as Posted takes the stock off now, as a later
+            # posting would (owner, 24-Oct-2026).
+            service.sync_order_stock(db, doc, user.id)
         if doc_type == SALES_ORDER and doc.status in order_ledger.IN_LEDGER:
             # Saved straight as Posted: it bills the customer, as a later posting would.
             db.flush()
@@ -398,10 +402,9 @@ def _update(doc_type: str, permission: str):
         # After the lines, never before: posting moves stock for what the
         # document says now, not for the lines it had when it was opened.
         if new_status:
-            if doc_type == SALES_ORDER and new_status == "Posted":
-                service.post_sales_order_stock(db, doc, user.id)
             doc.status = new_status
         if doc_type == SALES_ORDER:
+            service.sync_order_stock(db, doc, user.id)
             order_ledger.sync(db, doc, user)
 
         db.commit()
@@ -471,15 +474,12 @@ def _set_status(doc_type: str, permission: str):
 
         service.check_transition(doc_type, doc.status, payload.status)
 
-        # Posting a sales order is what moves stock, and it happens in the
-        # same transaction as the status change.
-        if doc_type == SALES_ORDER and payload.status == "Posted" and doc.status != "Posted":
-
-            service.post_sales_order_stock(db, doc, user.id)
-
         doc.status = payload.status
         doc.updated_by = user.id
         if doc_type == SALES_ORDER:
+            # Posting takes the stock off, cancelling a posted order puts it
+            # back, in the same transaction as the status change.
+            service.sync_order_stock(db, doc, user.id)
             order_ledger.sync(db, doc, user)
         db.commit()
         return {"id": str(doc.id), "status": doc.status}
