@@ -6,13 +6,14 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Field, Modal, Select, TextArea, TextInput } from "@/components/ui/Modal";
 import { GridHeader, GridTh, gridCellClass, gridRowClass } from "@/components/ui/grid";
 import { Button, EmptyState, ErrorNote, PageHeader, ReasonDialog, Spinner } from "@/components/finance/ui";
+import { ComplaintForm } from "@/components/hrms/ComplaintForm";
 import { EmployeeForm } from "@/components/hrms/EmployeeForm";
 import { SalaryForm } from "@/components/hrms/SalaryForm";
 import { Fact, HrBadge, Tile, selectClass } from "@/components/hrms/ui";
 import { api } from "@/lib/api";
 import {
   days, download, errorText, fmtDate, label, mediaUrl, money, todayIso, useHr,
-  type Employee, type EmployeeDetail, type Lookups,
+  type Complaint, type Employee, type EmployeeDetail, type Lookups,
 } from "@/lib/hrms";
 
 interface Listing { items: Employee[]; total: number; page: number; page_size: number; status_counts: Record<string, number> }
@@ -144,6 +145,45 @@ export default function EmployeesPage() {
 }
 
 /* ---------------------------------------------------------------- profile */
+
+/** The employee's complaints from senior management. Hidden for anyone
+ *  without the (Administrator-only) complaints permission. */
+function ProfileComplaints({ employeeId, employeeLabel }: { employeeId: string; employeeLabel: string }) {
+  const list = useHr<{ items: Complaint[] }>(`/hrms/complaints?employee_id=${employeeId}&page_size=200`);
+  const [editing, setEditing] = useState<Complaint | "new" | null>(null);
+  if (list.error || !list.data) return null;
+  const items = list.data.items;
+  return (
+    <div className="rounded-xl border border-line">
+      <div className="flex items-center border-b border-line px-4 py-2.5">
+        <h4 className="m-0 text-[13px] font-semibold">Complaints {items.length > 0 && <span className="font-normal text-faint">({items.length})</span>}</h4>
+        <button onClick={() => setEditing("new")}
+          className="ml-auto flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">
+          <Plus size={13} /> Log complaint
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="m-0 px-4 py-3 text-[12px] text-faint">No complaints on record.</p>
+      ) : (
+        <table className="w-full border-collapse text-[12.5px]">
+          <tbody>
+            {items.map((c) => (
+              <tr key={c.id} onClick={() => setEditing(c)} className="cursor-pointer border-b border-line last:border-0 hover:bg-hover">
+                <td className="whitespace-nowrap px-4 py-2 text-muted">{fmtDate(c.complaint_date)}</td>
+                <td className="px-2 py-2"><span className="font-medium">{c.subject}</span>
+                  <span className="block text-[11px] text-faint">by {c.raised_by}{c.raised_by_designation ? `, ${c.raised_by_designation}` : ""}</span></td>
+                <td className="px-2 py-2 text-right"><HrBadge status={c.severity} /></td>
+                <td className="px-4 py-2 text-right"><HrBadge status={c.status} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {editing && <ComplaintForm complaint={editing === "new" ? null : editing} employeeId={employeeId} employeeLabel={employeeLabel}
+        onClose={() => setEditing(null)} onSaved={() => { setEditing(null); list.reload(); }} />}
+    </div>
+  );
+}
 
 function Profile({ id, lookups, onClose, onChanged }: {
   id: string; lookups: Lookups | null; onClose: () => void; onChanged: () => void;
@@ -313,6 +353,7 @@ function Profile({ id, lookups, onClose, onChanged }: {
                 </table>
               </div>
             )}
+            <ProfileComplaints employeeId={e.id} employeeLabel={`${e.employee_code}  ${e.full_name}`} />
             {e.notes && <p className="m-0 whitespace-pre-wrap text-[12.5px] text-muted">{e.notes}</p>}
           </div>
         )}

@@ -1385,3 +1385,99 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(require_permis
         "employees_without_salary": without_salary,
         "setup_needed": not departments,
     }
+
+
+# ---------------------------------------------------------------- complaints
+#
+# Complaints about an employee raised by senior management (owner,
+# 24-Oct-2026). Confidential: their own permissions, held by Administrator
+# only, not by the Staff role. Never deleted; a withdrawn or baseless one is
+# marked DISMISSED, so the history stays.
+
+def _complaint_dict(c: m.EmployeeComplaint, employees: dict) -> dict:
+    e = employees.get(c.employee_id)
+    return {**_dict(c), "employee_name": e.full_name if e else None,
+            "employee_code": e.employee_code if e else None, "employee_status": e.status if e else None}
+
+
+def _check_complaint(payload: s.ComplaintIn, e: m.Employee) -> None:
+    if payload.complaint_date > date.today():
+        raise HTTPException(400, "The complaint date cannot be in the future.")
+    if payload.resolved_on and payload.resolved_on < payload.complaint_date:
+        raise HTTPException(400, "The resolved date is before the complaint date.")
+    if payload.status == "RESOLVED" and not (payload.action_taken or "").strip():
+        raise HTTPException(400, "Say what action was taken before marking the complaint resolved.")
+
+
+@router.get("/complaints")
+def list_complaints(search: str | None = None, employee_id: uuid.UUID | None = None,
+                    status_filter: list[str] = Query(default=[], alias="status"),
+                    page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=5000),
+                    db: Session = Depends(get_db),
+                    user: User = Depends(require_permission("hrms.complaints.view"))):
+    company_id = active_company_id(db)
+    stmt = select(m.EmployeeComplaint).where(m.EmployeeComplaint.company_id == company_id)
+    if employee_id:
+        stmt = stmt.where(m.EmployeeComplaint.employee_id == employee_id)
+    if status_filter:
+        stmt = stmt.where(m.EmployeeComplaint.status.in_([x.upper() for x in status_filter]))
+    if search:
+        like = f"%{search.strip()}%"
+        stmt = stmt.where(or_(
+            m.EmployeeComplaint.complaint_number.ilike(like), m.EmployeeComplaint.subject.ilike(like),
+            m.EmployeeComplaint.raised_by.ilike(like), m.EmployeeComplaint.details.ilike(like),
+            m.EmployeeComplaint.employee_id.in_(select(m.Employee.id).where(
+                m.Employee.company_id == company_id,
+                or_(m.Employee.full_name.ilike(like), m.Employee.employee_code.ilike(like))))))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(m.EmployeeComplaint.complaint_date.desc(),
+                                    m.EmployeeComplaint.complaint_number.desc())
+                      .offset((page - 1) * page_size).limit(page_size)).all()
+    employees = {e.id: e for e in db.scalars(select(m.Employee).where(m.Employee.company_id == company_id))}
+    counts = dict(db.execute(select(m.EmployeeComplaint.status, func.count())
+                             .where(m.EmployeeComplaint.company_id == company_id)
+                             .group_by(m.EmployeeComplaint.status)).all())
+    return {"items": [_complaint_dict(c, employees) for c in rows], "total": total, "status_counts": counts}
+
+
+@router.post("/complaints", status_code=201)
+def create_complaint(payload: s.ComplaintIn, db: Session = Depends(get_db),
+                     ctx: AuditContext = Depends(request_context),
+                     user: User = Depends(require_permission("hrms.complaints.create"))):
+    company_id = active_company_id(db)
+    e = _owned(db, m.Employee, company_id, _uuid(payload.employee_id, "employee"), "Employee")
+    _check_complaint(payload, e)
+    number = next_number(db, company_id, "hr_complaint", "HR")
+    c = m.EmployeeComplaint(company_id=company_id, complaint_number=f"CMP-{int(number):05d}", created_by=user.id,
+                            **{**payload.model_dump(exclude={"employee_id"}), "employee_id": e.id,
+                               "resolved_on": (payload.resolved_on or date.today())
+                                   if payload.status in ("RESOLVED", "DISMISSED") else None})
+    db.add(c)
+    db.flush()
+    audit.record(db, ctx, action="create", module="hrms", entity="hr_employee_complaint", entity_id=c.id,
+                 company_id=company_id, new_values=audit.snapshot(c))
+    _save(db)
+    return _complaint_dict(c, {e.id: e})
+
+
+@router.put("/complaints/{complaint_id}")
+def update_complaint(complaint_id: uuid.UUID, payload: s.ComplaintIn, db: Session = Depends(get_db),
+                     ctx: AuditContext = Depends(request_context),
+                     user: User = Depends(require_permission("hrms.complaints.edit"))):
+    company_id = active_company_id(db)
+    c = _owned(db, m.EmployeeComplaint, company_id, complaint_id, "Complaint")
+    e = _owned(db, m.Employee, company_id, _uuid(payload.employee_id, "employee"), "Employee")
+    _check_complaint(payload, e)
+    before = audit.snapshot(c)
+    for key, value in payload.model_dump(exclude={"employee_id"}).items():
+        setattr(c, key, value)
+    c.employee_id = e.id
+    if c.status not in ("RESOLVED", "DISMISSED"):
+        c.resolved_on = None
+    elif not c.resolved_on:
+        c.resolved_on = date.today()
+    c.updated_by = user.id
+    audit.record(db, ctx, action="update", module="hrms", entity="hr_employee_complaint", entity_id=c.id,
+                 company_id=company_id, old_values=before, new_values=audit.snapshot(c))
+    _save(db)
+    return _complaint_dict(c, {e.id: e})

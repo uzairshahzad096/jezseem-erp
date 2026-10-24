@@ -512,3 +512,34 @@ class PayslipLine(UUIDPKMixin, Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
 
     payslip: Mapped["Payslip"] = relationship(back_populates="lines")
+
+
+# ---------------------------------------------------------------- complaints
+
+COMPLAINT_CATEGORIES = ["CONDUCT", "ATTENDANCE", "PERFORMANCE", "MISCONDUCT", "CUSTOMER", "OTHER"]
+COMPLAINT_SEVERITIES = ["LOW", "MEDIUM", "HIGH"]
+COMPLAINT_STATUSES = ["OPEN", "UNDER_REVIEW", "RESOLVED", "DISMISSED"]
+
+
+class EmployeeComplaint(UUIDPKMixin, AuditMixin, Base):
+    """A complaint about one employee, raised by senior management (owner,
+    24-Oct-2026). Kept for the record, never deleted: a complaint withdrawn or
+    found baseless is DISMISSED. Former employees keep theirs."""
+
+    __tablename__ = "hr_employee_complaints"
+    __table_args__ = (UniqueConstraint("company_id", "complaint_number", name="uq_hr_complaint_number"),)
+
+    company_id: Mapped[uuid.UUID] = _company()
+    complaint_number: Mapped[str] = mapped_column(String(30), nullable=False)
+    employee_id: Mapped[uuid.UUID] = _fk("hr_employees.id", nullable=False)
+    complaint_date: Mapped[date] = mapped_column(Date, nullable=False)
+    #: Who in senior management raised it, as they are known in the company.
+    raised_by: Mapped[str] = mapped_column(String(150), nullable=False)
+    raised_by_designation: Mapped[str | None] = mapped_column(String(100))
+    category: Mapped[str] = mapped_column(String(20), default="CONDUCT", nullable=False)
+    severity: Mapped[str] = mapped_column(String(10), default="MEDIUM", nullable=False)
+    subject: Mapped[str] = mapped_column(String(200), nullable=False)
+    details: Mapped[str | None] = mapped_column(Text)
+    action_taken: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(15), default="OPEN", nullable=False, index=True)
+    resolved_on: Mapped[date | None] = mapped_column(Date)

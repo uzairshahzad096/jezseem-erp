@@ -30,6 +30,29 @@ export interface Lookups {
 
 export type CalcType = "FIXED" | "PERCENT_BASIC";
 
+/** A complaint about an employee raised by senior management (owner, 24-Oct-2026). */
+export interface Complaint {
+  id: string;
+  complaint_number: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  employee_status: string | null;
+  complaint_date: string;
+  raised_by: string;
+  raised_by_designation: string | null;
+  category: string;
+  severity: string;
+  subject: string;
+  details: string | null;
+  action_taken: string | null;
+  status: string;
+  resolved_on: string | null;
+}
+
+export const COMPLAINT_CATEGORIES = ["CONDUCT", "ATTENDANCE", "PERFORMANCE", "MISCONDUCT", "CUSTOMER", "OTHER"];
+export const COMPLAINT_STATUSES = ["OPEN", "UNDER_REVIEW", "RESOLVED", "DISMISSED"];
+
 export interface Employee {
   id: string;
   employee_code: string;
@@ -210,6 +233,14 @@ const TONE: Record<string, string> = {
   SETTLED: "bg-sky/15 text-sky",
   EARNING: "bg-success/15 text-success",
   DEDUCTION: "bg-rose/10 text-rose",
+  // complaints: status and severity
+  OPEN: "bg-rose/10 text-rose",
+  UNDER_REVIEW: "bg-amber/15 text-amber",
+  RESOLVED: "bg-success/15 text-success",
+  DISMISSED: "bg-hover text-faint",
+  HIGH: "bg-rose/10 text-rose",
+  MEDIUM: "bg-amber/15 text-amber",
+  LOW: "bg-sky/15 text-sky",
 };
 
 export const hrTone = (status: string) => TONE[status] ?? "bg-hover text-muted";

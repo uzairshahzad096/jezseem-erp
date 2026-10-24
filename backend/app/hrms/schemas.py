@@ -259,3 +259,17 @@ class ManualLineIn(BaseModel):
     kind: Literal["EARNING", "DEDUCTION"]
     name: str = Field(min_length=1, max_length=200)
     amount: Decimal = Field(gt=0)
+
+
+class ComplaintIn(BaseModel):
+    employee_id: str
+    complaint_date: date
+    raised_by: str = Field(min_length=2, max_length=150)
+    raised_by_designation: str | None = Field(default=None, max_length=100)
+    category: Literal["CONDUCT", "ATTENDANCE", "PERFORMANCE", "MISCONDUCT", "CUSTOMER", "OTHER"] = "CONDUCT"
+    severity: Literal["LOW", "MEDIUM", "HIGH"] = "MEDIUM"
+    subject: str = Field(min_length=3, max_length=200)
+    details: str | None = None
+    action_taken: str | None = None
+    status: Literal["OPEN", "UNDER_REVIEW", "RESOLVED", "DISMISSED"] = "OPEN"
+    resolved_on: date | None = None

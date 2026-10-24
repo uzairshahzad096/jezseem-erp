@@ -168,6 +168,7 @@ export const NAV_MODULES: NavModule[] = [
       { label: "Attendance", href: "/hrms/attendance", permission: "hrms.attendance.view" },
       { label: "Leave", href: "/hrms/leave", permission: "hrms.leave.view" },
       { label: "Loans & Advances", href: "/hrms/loans", permission: "hrms.loans.view" },
+      { label: "Complaints", href: "/hrms/complaints", permission: "hrms.complaints.view" },
       { label: "Payroll", href: "/hrms/payroll", permission: "hrms.payroll.view" },
       { label: "HR Setup", href: "/hrms/setup", permission: "hrms.setup.view" },
     ],
