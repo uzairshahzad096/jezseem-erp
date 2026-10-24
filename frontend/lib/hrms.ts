@@ -50,6 +50,34 @@ export interface Complaint {
   resolved_on: string | null;
 }
 
+/** Senior management's remarks on an employee who left (owner, 24-Oct-2026). */
+export interface ExitReview {
+  id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  employee_status: string | null;
+  separation_date: string | null;
+  review_date: string;
+  reviewer_name: string;
+  reviewer_designation: string | null;
+  behaviour: number | null;
+  discipline: number | null;
+  punctuality: number | null;
+  work_quality: number | null;
+  honesty: number | null;
+  rehire: string;
+  comments: string;
+  average: number | null;
+}
+
+/** The areas rated 1-5, in the order the form shows them. */
+export const REVIEW_AREAS = [
+  ["behaviour", "Behaviour"], ["discipline", "Discipline"], ["punctuality", "Punctuality"],
+  ["work_quality", "Work quality"], ["honesty", "Honesty / trust"],
+] as const;
+export const REHIRE_LABEL: Record<string, string> = { YES: "Would rehire", NO: "Do not rehire", CONDITIONAL: "Rehire with conditions" };
+
 export const COMPLAINT_CATEGORIES = ["CONDUCT", "ATTENDANCE", "PERFORMANCE", "MISCONDUCT", "CUSTOMER", "OTHER"];
 export const COMPLAINT_STATUSES = ["OPEN", "UNDER_REVIEW", "RESOLVED", "DISMISSED"];
 
@@ -241,6 +269,10 @@ const TONE: Record<string, string> = {
   HIGH: "bg-rose/10 text-rose",
   MEDIUM: "bg-amber/15 text-amber",
   LOW: "bg-sky/15 text-sky",
+  // leaving remarks: would we rehire?
+  YES: "bg-success/15 text-success",
+  NO: "bg-rose/10 text-rose",
+  CONDITIONAL: "bg-amber/15 text-amber",
 };
 
 export const hrTone = (status: string) => TONE[status] ?? "bg-hover text-muted";

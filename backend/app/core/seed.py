@@ -59,8 +59,8 @@ MODULES: dict[str, list[str]] = {
     "projects": ["view", "tasks", "members", "documents"],
     "communication": ["messages", "notices", "announcements"],
     "hrms": ["employees", "attendance", "leave", "payroll", "setup", "loans",
-             # Confidential: Administrator only (migration 0026).
-             "complaints"],
+             # Confidential: Administrator only (migrations 0026, 0027).
+             "complaints", "exit_reviews"],
     "calibration": ["requests", "technicians", "due", "reports",
                     # The previous ERP's screens (migration 0019).
                     "machines", "customer_machines", "contracts", "invoices", "definitions"],

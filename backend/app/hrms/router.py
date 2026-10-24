@@ -1481,3 +1481,87 @@ def update_complaint(complaint_id: uuid.UUID, payload: s.ComplaintIn, db: Sessio
                  company_id=company_id, old_values=before, new_values=audit.snapshot(c))
     _save(db)
     return _complaint_dict(c, {e.id: e})
+
+
+# ---------------------------------------------------------------- leaving remarks
+#
+# Senior management's remarks on someone who resigned or was terminated
+# (owner, 24-Oct-2026). Confidential like complaints: Administrator only.
+
+def _review_dict(r: m.ExitReview, employees: dict) -> dict:
+    e = employees.get(r.employee_id)
+    rated = [v for v in (getattr(r, a) for a in m.REVIEW_AREAS) if v]
+    return {**_dict(r), "employee_name": e.full_name if e else None,
+            "employee_code": e.employee_code if e else None, "employee_status": e.status if e else None,
+            "separation_date": e.separation_date if e else None,
+            "average": round(sum(rated) / len(rated), 1) if rated else None}
+
+
+def _check_review(payload: s.ExitReviewIn, e: m.Employee) -> None:
+    if e.status not in m.SEPARATED:
+        raise HTTPException(400, f"{e.full_name} has not left the company. Record the leaving first "
+                                 "(Employees, open the profile, Record leaving), then add the remarks.")
+    if payload.review_date > date.today():
+        raise HTTPException(400, "The remarks date cannot be in the future.")
+
+
+@router.get("/exit-reviews")
+def list_exit_reviews(search: str | None = None, employee_id: uuid.UUID | None = None,
+                      rehire: str | None = None,
+                      page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=5000),
+                      db: Session = Depends(get_db),
+                      user: User = Depends(require_permission("hrms.exit_reviews.view"))):
+    company_id = active_company_id(db)
+    stmt = select(m.ExitReview).where(m.ExitReview.company_id == company_id)
+    if employee_id:
+        stmt = stmt.where(m.ExitReview.employee_id == employee_id)
+    if rehire:
+        stmt = stmt.where(m.ExitReview.rehire == rehire.upper())
+    if search:
+        like = f"%{search.strip()}%"
+        stmt = stmt.where(or_(
+            m.ExitReview.reviewer_name.ilike(like), m.ExitReview.comments.ilike(like),
+            m.ExitReview.employee_id.in_(select(m.Employee.id).where(
+                m.Employee.company_id == company_id,
+                or_(m.Employee.full_name.ilike(like), m.Employee.employee_code.ilike(like))))))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(stmt.order_by(m.ExitReview.review_date.desc(), m.ExitReview.created_at.desc())
+                      .offset((page - 1) * page_size).limit(page_size)).all()
+    employees = {e.id: e for e in db.scalars(select(m.Employee).where(m.Employee.company_id == company_id))}
+    return {"items": [_review_dict(r, employees) for r in rows], "total": total}
+
+
+@router.post("/exit-reviews", status_code=201)
+def create_exit_review(payload: s.ExitReviewIn, db: Session = Depends(get_db),
+                       ctx: AuditContext = Depends(request_context),
+                       user: User = Depends(require_permission("hrms.exit_reviews.create"))):
+    company_id = active_company_id(db)
+    e = _owned(db, m.Employee, company_id, _uuid(payload.employee_id, "employee"), "Employee")
+    _check_review(payload, e)
+    r = m.ExitReview(company_id=company_id, created_by=user.id,
+                     **{**payload.model_dump(exclude={"employee_id"}), "employee_id": e.id,
+                        "reviewer_name": payload.reviewer_name.strip(), "comments": payload.comments.strip()})
+    db.add(r)
+    db.flush()
+    audit.record(db, ctx, action="create", module="hrms", entity="hr_exit_review", entity_id=r.id,
+                 company_id=company_id, new_values=audit.snapshot(r))
+    _save(db)
+    return _review_dict(r, {e.id: e})
+
+
+@router.put("/exit-reviews/{review_id}")
+def update_exit_review(review_id: uuid.UUID, payload: s.ExitReviewIn, db: Session = Depends(get_db),
+                       ctx: AuditContext = Depends(request_context),
+                       user: User = Depends(require_permission("hrms.exit_reviews.edit"))):
+    company_id = active_company_id(db)
+    r = _owned(db, m.ExitReview, company_id, review_id, "Remarks")
+    e = _owned(db, m.Employee, company_id, _uuid(payload.employee_id, "employee"), "Employee")
+    _check_review(payload, e)
+    before = audit.snapshot(r)
+    for key, value in payload.model_dump(exclude={"employee_id"}).items():
+        setattr(r, key, value.strip() if isinstance(value, str) else value)
+    r.employee_id, r.updated_by = e.id, user.id
+    audit.record(db, ctx, action="update", module="hrms", entity="hr_exit_review", entity_id=r.id,
+                 company_id=company_id, old_values=before, new_values=audit.snapshot(r))
+    _save(db)
+    return _review_dict(r, {e.id: e})

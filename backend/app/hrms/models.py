@@ -543,3 +543,31 @@ class EmployeeComplaint(UUIDPKMixin, AuditMixin, Base):
     action_taken: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(15), default="OPEN", nullable=False, index=True)
     resolved_on: Mapped[date | None] = mapped_column(Date)
+
+
+# ---------------------------------------------------------------- leaving remarks
+
+REVIEW_AREAS = ("behaviour", "discipline", "punctuality", "work_quality", "honesty")
+REHIRE_CHOICES = ["YES", "NO", "CONDITIONAL"]
+
+
+class ExitReview(UUIDPKMixin, AuditMixin, Base):
+    """Senior management's remarks on an employee who has resigned or been
+    terminated: a 1-5 rating per area, whether they would be taken back, and
+    comments (owner, 24-Oct-2026). Several managers may each give one.
+    Confidential, and never deleted."""
+
+    __tablename__ = "hr_exit_reviews"
+
+    company_id: Mapped[uuid.UUID] = _company()
+    employee_id: Mapped[uuid.UUID] = _fk("hr_employees.id", nullable=False)
+    review_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reviewer_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    reviewer_designation: Mapped[str | None] = mapped_column(String(100))
+    behaviour: Mapped[int | None] = mapped_column(Integer)
+    discipline: Mapped[int | None] = mapped_column(Integer)
+    punctuality: Mapped[int | None] = mapped_column(Integer)
+    work_quality: Mapped[int | None] = mapped_column(Integer)
+    honesty: Mapped[int | None] = mapped_column(Integer)
+    rehire: Mapped[str] = mapped_column(String(12), nullable=False)
+    comments: Mapped[str] = mapped_column(Text, nullable=False)

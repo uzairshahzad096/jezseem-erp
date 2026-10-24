@@ -8,12 +8,13 @@ import { GridHeader, GridTh, gridCellClass, gridRowClass } from "@/components/ui
 import { Button, EmptyState, ErrorNote, PageHeader, ReasonDialog, Spinner } from "@/components/finance/ui";
 import { ComplaintForm } from "@/components/hrms/ComplaintForm";
 import { EmployeeForm } from "@/components/hrms/EmployeeForm";
+import { ExitReviewForm, Stars } from "@/components/hrms/ExitReviewForm";
 import { SalaryForm } from "@/components/hrms/SalaryForm";
 import { Fact, HrBadge, Tile, selectClass } from "@/components/hrms/ui";
 import { api } from "@/lib/api";
 import {
   days, download, errorText, fmtDate, label, mediaUrl, money, todayIso, useHr,
-  type Complaint, type Employee, type EmployeeDetail, type Lookups,
+  REHIRE_LABEL, REVIEW_AREAS, type Complaint, type Employee, type EmployeeDetail, type ExitReview, type Lookups,
 } from "@/lib/hrms";
 
 interface Listing { items: Employee[]; total: number; page: number; page_size: number; status_counts: Record<string, number> }
@@ -145,6 +146,47 @@ export default function EmployeesPage() {
 }
 
 /* ---------------------------------------------------------------- profile */
+
+/** Senior management's remarks on someone who left: ratings, rehire, comments.
+ *  Shown only for a former employee, and only to those allowed to see them. */
+function ProfileLeavingRemarks({ employeeId, employeeLabel }: { employeeId: string; employeeLabel: string }) {
+  const list = useHr<{ items: ExitReview[] }>(`/hrms/exit-reviews?employee_id=${employeeId}&page_size=100`);
+  const [editing, setEditing] = useState<ExitReview | "new" | null>(null);
+  if (list.error || !list.data) return null;
+  const items = list.data.items;
+  return (
+    <div className="rounded-xl border border-line">
+      <div className="flex items-center border-b border-line px-4 py-2.5">
+        <h4 className="m-0 text-[13px] font-semibold">Leaving remarks from senior management</h4>
+        <button onClick={() => setEditing("new")}
+          className="ml-auto flex items-center gap-1 text-[12px] font-medium text-primary hover:underline">
+          <Plus size={13} /> Add remarks
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <p className="m-0 px-4 py-3 text-[12px] text-faint">No remarks yet. Ask senior management for their comments on this person.</p>
+      ) : items.map((r) => (
+        <button key={r.id} onClick={() => setEditing(r)}
+          className="block w-full border-b border-line px-4 py-3 text-left last:border-0 hover:bg-hover">
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <b className="font-semibold">{r.reviewer_name}</b>
+            {r.reviewer_designation && <span className="text-faint">{r.reviewer_designation}</span>}
+            <span className="text-faint">· {fmtDate(r.review_date)}</span>
+            <span className="ml-auto"><HrBadge status={r.rehire} text={REHIRE_LABEL[r.rehire]} /></span>
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px] text-muted">
+            {REVIEW_AREAS.filter(([k]) => r[k]).map(([k, text]) => (
+              <span key={k} className="inline-flex items-center gap-1.5">{text} <Stars value={r[k]} size={12} /></span>
+            ))}
+          </div>
+          <p className="mb-0 mt-1.5 whitespace-pre-wrap text-[12.5px]">{r.comments}</p>
+        </button>
+      ))}
+      {editing && <ExitReviewForm review={editing === "new" ? null : editing} employeeId={employeeId} employeeLabel={employeeLabel}
+        onClose={() => setEditing(null)} onSaved={() => { setEditing(null); list.reload(); }} />}
+    </div>
+  );
+}
 
 /** The employee's complaints from senior management. Hidden for anyone
  *  without the (Administrator-only) complaints permission. */
@@ -353,6 +395,7 @@ function Profile({ id, lookups, onClose, onChanged }: {
                 </table>
               </div>
             )}
+            {left && <ProfileLeavingRemarks employeeId={e.id} employeeLabel={`${e.employee_code}  ${e.full_name}`} />}
             <ProfileComplaints employeeId={e.id} employeeLabel={`${e.employee_code}  ${e.full_name}`} />
             {e.notes && <p className="m-0 whitespace-pre-wrap text-[12.5px] text-muted">{e.notes}</p>}
           </div>

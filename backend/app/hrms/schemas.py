@@ -273,3 +273,20 @@ class ComplaintIn(BaseModel):
     action_taken: str | None = None
     status: Literal["OPEN", "UNDER_REVIEW", "RESOLVED", "DISMISSED"] = "OPEN"
     resolved_on: date | None = None
+
+
+Rating = int | None
+
+
+class ExitReviewIn(BaseModel):
+    employee_id: str
+    review_date: date
+    reviewer_name: str = Field(min_length=2, max_length=150)
+    reviewer_designation: str | None = Field(default=None, max_length=100)
+    behaviour: Rating = Field(default=None, ge=1, le=5)
+    discipline: Rating = Field(default=None, ge=1, le=5)
+    punctuality: Rating = Field(default=None, ge=1, le=5)
+    work_quality: Rating = Field(default=None, ge=1, le=5)
+    honesty: Rating = Field(default=None, ge=1, le=5)
+    rehire: Literal["YES", "NO", "CONDITIONAL"]
+    comments: str = Field(min_length=5)
