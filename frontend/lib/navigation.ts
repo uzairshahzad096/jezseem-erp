@@ -170,6 +170,18 @@ export const NAV_MODULES: NavModule[] = [
       { label: "Loans & Advances", href: "/hrms/loans", permission: "hrms.loans.view" },
       { label: "Complaints", href: "/hrms/complaints", permission: "hrms.complaints.view" },
       { label: "Leaving Remarks", href: "/hrms/leaving-remarks", permission: "hrms.exit_reviews.view" },
+      {
+        // JOSE — Jezseem School of Excellence, the training school HR runs (owner, 24-Oct-2026).
+        label: "JOSE School", href: "/hrms/school/students", permission: "hrms.school.view",
+        children: [
+          { label: "Students", href: "/hrms/school/students", permission: "hrms.school.view" },
+          { label: "Courses", href: "/hrms/school/courses", permission: "hrms.school.view" },
+          { label: "Batches", href: "/hrms/school/batches", permission: "hrms.school.view" },
+          { label: "Enrollments", href: "/hrms/school/enrollments", permission: "hrms.school.view" },
+          { label: "Attendance", href: "/hrms/school/attendance", permission: "hrms.school.view" },
+          { label: "Fee Payments", href: "/hrms/school/payments", permission: "hrms.school.view" },
+        ],
+      },
       { label: "Payroll", href: "/hrms/payroll", permission: "hrms.payroll.view" },
       { label: "HR Setup", href: "/hrms/setup", permission: "hrms.setup.view" },
     ],

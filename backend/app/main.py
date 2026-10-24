@@ -21,6 +21,7 @@ from app.finance.router import router as finance_router
 from app.receivables.router import ar_router, sales_router as sales_invoice_router
 from app.gatepass.router import router as gatepass_router
 from app.hrms.router import router as hrms_router
+from app.school.router import router as school_router
 from app.inventory.images import MEDIA_URL_PREFIX
 from app.inventory.router import router as inventory_router
 from app.partners.router import router as partners_router
@@ -212,6 +213,7 @@ app.include_router(imported_vouchers_router, prefix=settings.API_V1_PREFIX)
 app.include_router(sales_invoice_router, prefix=settings.API_V1_PREFIX)
 app.include_router(ar_router, prefix=settings.API_V1_PREFIX)
 app.include_router(hrms_router, prefix=settings.API_V1_PREFIX)
+app.include_router(school_router, prefix=settings.API_V1_PREFIX)
 app.include_router(calibration_router, prefix=settings.API_V1_PREFIX)
 app.include_router(leads_router, prefix=settings.API_V1_PREFIX)
 app.include_router(crm_router, prefix=settings.API_V1_PREFIX)

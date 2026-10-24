@@ -34,7 +34,8 @@ export function ListScreen<T extends { id: string }>({
   columns: ListColumn<T>[];
   createLabel?: string;
   onCreate?: () => void;
-  onEdit: (row: T) => void;
+  /** Leave out for a list whose rows are not edited (e.g. receipts): no Edit column. */
+  onEdit?: (row: T) => void;
   /** The row's PDF, when it prints. */
   printPath?: (row: T) => string | null;
   printTitle?: string;
@@ -77,7 +78,7 @@ export function ListScreen<T extends { id: string }>({
   }, [endpoint, page, pageSize, search, query, reloadKey, tick]);
 
   const shown = useMemo(() => grid.apply(rows), [grid, rows]);
-  const fixed = 1 + (printPath ? 1 : 0) + (rowActions ? 1 : 0);
+  const fixed = (onEdit ? 1 : 0) + (printPath ? 1 : 0) + (rowActions ? 1 : 0);
   const pages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -120,7 +121,7 @@ export function ListScreen<T extends { id: string }>({
             <table className="w-full border-collapse text-left" style={{ minWidth: `${120 + visible.length * 130}px` }}>
               <thead>
                 <tr className="border-b border-line">
-                  <GridTh>Edit</GridTh>
+                  {onEdit && <GridTh>Edit</GridTh>}
                   {printPath && <GridTh>{printTitle ?? "Print"}</GridTh>}
                   {rowActions && <GridTh>{actionsLabel}</GridTh>}
                   {visible.map((c) => <GridTh key={c.key} numeric={c.numeric}>{c.label}</GridTh>)}
@@ -145,12 +146,14 @@ export function ListScreen<T extends { id: string }>({
                       </tr>
                     ),
                     <tr key={row.id} className={`align-top ${gridRowClass(index)}`} style={grid.rowStyle(row)}>
-                      <td className={gridCellClass()}>
-                        <button onClick={() => onEdit(row)} aria-label="Edit" title="Edit"
-                          className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary">
-                          <Pencil size={14} />
-                        </button>
-                      </td>
+                      {onEdit && (
+                        <td className={gridCellClass()}>
+                          <button onClick={() => onEdit(row)} aria-label="Edit" title="Edit"
+                            className="rounded-md p-1.5 text-muted hover:bg-primary/10 hover:text-primary">
+                            <Pencil size={14} />
+                          </button>
+                        </td>
+                      )}
                       {printPath && (
                         <td className={gridCellClass()}>
                           {pdf && (
